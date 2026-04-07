@@ -1,0 +1,18 @@
+[Unit]
+Description=Inferno Internet Radio Bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/iradio-bridge --config /etc/iradio/config.toml
+Restart=on-failure
+RestartSec=5
+Environment=RUST_LOG=info
+StateDirectory=iradio
+ConfigurationDirectory=iradio
+# Ensure favourites directory exists at startup
+ExecStartPre=/bin/mkdir -p /var/lib/iradio
+
+[Install]
+WantedBy=default.target

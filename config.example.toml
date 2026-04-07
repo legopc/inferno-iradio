@@ -1,0 +1,38 @@
+# iradio-bridge configuration
+# Copy to /etc/iradio/config.toml and adjust as needed.
+
+# TCP port the web UI and REST API listens on
+port = 8765
+
+# Maximum concurrent player slots (each = 1 stereo Dante TX pair)
+max_players = 4
+
+# Where favourites are persisted
+favourites_path = "/var/lib/iradio/favourites.json"
+
+[auth]
+# Set to true to require HTTP Basic Auth for all routes (except /api/v1/health)
+enabled = false
+username = ""
+password = ""
+# Credentials can also be supplied via environment:
+#   IRADIO_AUTH_USER=admin IRADIO_AUTH_PASS=secret
+
+[alsa]
+# Prefix for Inferno ALSA device names (iradio-1, iradio-2, ...)
+device_prefix = "iradio"
+# Base ALT_PORT for the first player slot.
+# Slots use: base, base+20, base+40, base+60
+# Avoid conflicts: aux=6004-6011, bt≈6020-6060
+alt_port_base = 6100
+# Target sample rate for Inferno PCM (must match Dante clock domain)
+sample_rate = 48000
+# ALSA PCM buffer in frames
+buffer_frames = 4096
+
+[radiobrowser]
+# Leave empty to auto-resolve the best RadioBrowser server via DNS
+# (recommended — uses all.api.radio-browser.info)
+api_url = ""
+# HTTP request timeout in seconds
+request_timeout_secs = 10
