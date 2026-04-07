@@ -35,6 +35,8 @@ body {
 .pill-dot.green  { background: #3e8635; }
 .pill-dot.blue   { background: #2b9af3; }
 .pill-dot.orange { background: #ec7a08; }
+.pill-dot.active { background: #3e8635; }
+.pill-dot.error  { background: #c9190b; }
 .ptp-pill { background: #1a3a1a; color: #6eca6e; }
 .header-right { display: flex; align-items: center; gap: 8px; }
 
@@ -424,12 +426,13 @@ body {
 
 /* ── Config diff modal (F-2) ─────────────────────────────────────────────── */
 .diff-modal {
-  border: none;
+  border: 1px solid #d0d0d0;
   border-radius: 10px;
   box-shadow: 0 8px 32px rgba(0,0,0,.22);
+  outline: none;
   padding: 0;
-  min-width: 400px;
-  max-width: 600px;
+  min-width: 360px;
+  max-width: 560px;
   width: 90vw;
   position: fixed;
   top: 50%;
@@ -663,7 +666,26 @@ ___BEGIN___COMMAND_DONE_MARKER___0
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
   margin-bottom: 12px;
+}
+.filter-dropdown-wrap {
+  position: relative;
+  display: inline-block;
+}
+.filter-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: #fff;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.14);
+  z-index: 200;
+  min-width: 180px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px 0;
 }
 
 /* Empty state */
@@ -717,4 +739,61 @@ ___BEGIN___COMMAND_DONE_MARKER___0
   vertical-align: middle;
   margin-right: 6px;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Main content layout ─────────────────────────────────────────────────── */
+.main-content {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px 24px 40px;
+}
+@media (max-width: 640px) { .main-content { padding: 12px 12px 32px; } }
+
+/* ── Player card header ──────────────────────────────────────────────────── */
+.svc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Slot picker modal header / body ─────────────────────────────────────── */
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #e8e8e8;
+  background: #f8f8f8;
+  border-radius: 10px 10px 0 0;
+}
+.modal-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #151515;
+}
+.modal-body {
+  padding: 16px 18px 18px;
+}
+
+/* ── Quick Play form – responsive ────────────────────────────────────────── */
+.quick-play-controls {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+.quick-play-controls .input-url  { flex: 1 1 220px; min-width: 0; }
+.quick-play-controls .input-name { flex: 0 1 180px; min-width: 0; }
+@media (max-width: 640px) {
+  .quick-play-controls .input-url,
+  .quick-play-controls .input-name { flex: 1 1 100%; }
+}
+
+/* ── Station rows – tighten on small screens ─────────────────────────────── */
+@media (max-width: 480px) {
+  .station-row { gap: 8px; padding: 8px; }
+  .station-favicon, .station-favicon-placeholder { width: 26px; height: 26px; }
+  .station-actions { gap: 4px; }
+}

@@ -69,9 +69,9 @@
       <div class="card-body">
         <div class="form-row">
           <label class="row-label">Stream URL</label>
-          <div style="flex:1;display:flex;gap:8px">
-            <input type="text" id="quickUrl" class="form-input" placeholder="https://..." style="flex:1">
-            <input type="text" id="quickName" class="form-input" placeholder="Station name" style="width:180px">
+          <div class="quick-play-controls">
+            <input type="text" id="quickUrl" class="form-input input-url" placeholder="https://…">
+            <input type="text" id="quickName" class="form-input input-name" placeholder="Station name">
             <button class="btn btn-primary" onclick="quickPlay()">▶ Play</button>
           </div>
         </div>
@@ -90,13 +90,13 @@
         </div>
         <div class="browse-filters">
           <button class="btn btn-sm btn-secondary tab-btn-active" id="btnTop" onclick="browseTop()">Top Stations</button>
-          <div style="position:relative;display:inline-block">
+          <div class="filter-dropdown-wrap">
             <button class="btn btn-sm btn-secondary" id="btnTags" onclick="toggleTagsDropdown()">By Tag ▾</button>
-            <div id="tagsDropdown" class="hidden" style="position:absolute;top:100%;left:0;background:white;border:1px solid #ccc;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:100;min-width:180px;max-height:260px;overflow-y:auto;padding:4px 0"></div>
+            <div id="tagsDropdown" class="filter-dropdown hidden"></div>
           </div>
-          <div style="position:relative;display:inline-block">
+          <div class="filter-dropdown-wrap">
             <button class="btn btn-sm btn-secondary" id="btnCountries" onclick="toggleCountriesDropdown()">By Country ▾</button>
-            <div id="countriesDropdown" class="hidden" style="position:absolute;top:100%;left:0;background:white;border:1px solid #ccc;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:100;min-width:200px;max-height:260px;overflow-y:auto;padding:4px 0"></div>
+            <div id="countriesDropdown" class="filter-dropdown hidden"></div>
           </div>
         </div>
       </div>
