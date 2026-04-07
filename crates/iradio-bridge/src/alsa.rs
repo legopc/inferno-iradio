@@ -8,16 +8,10 @@ pub struct InfernoAlsaDevice {
 }
 
 /// Build the ALSA device name for a given player slot.
-/// Matches the asoundrc `pcm.inferno` template parameters.
-pub fn device_name(prefix: &str, slot: usize, alt_port_base: u16) -> String {
-    // ALSA key=value string for the inferno PCM plugin
-    // PROCESS_ID base: 10 (slot 1 = 10, slot 2 = 11, etc.)
-    let process_id = 10 + slot - 1;
-    let alt_port = alt_port_base + ((slot - 1) as u16) * 20;
-    format!(
-        "inferno:NAME={prefix}-{slot},TX_CHANNELS=2,RX_CHANNELS=0,\
-         PROCESS_ID={process_id},ALT_PORT={alt_port}"
-    )
+/// Uses the named PCM `pcm.inferno_iradio_N` defined in ~/.asoundrc
+/// (written by `alsa_setup::ensure_iradio_alsa` on startup).
+pub fn device_name(slot: usize) -> String {
+    format!("inferno_iradio_{}", slot)
 }
 
 impl InfernoAlsaDevice {

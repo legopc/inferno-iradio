@@ -6,6 +6,7 @@ use tracing::info;
 
 mod api;
 mod alsa;
+mod alsa_setup;
 mod auth;
 mod config;
 mod decode;
@@ -53,6 +54,13 @@ async fn main() -> anyhow::Result<()> {
         env!("CARGO_PKG_VERSION"),
         cfg.port
     );
+
+    // Auto-configure ~/.asoundrc with pcm.inferno_iradio_N blocks if requested
+    if cfg.alsa.setup_alsa {
+        if let Err(e) = alsa_setup::ensure_iradio_alsa(cfg.max_players, &cfg.alsa.asoundrc_path) {
+            tracing::warn!("ALSA auto-setup failed (non-fatal): {}", e);
+        }
+    }
 
     let app_state = Arc::new(state::AppState::new(cfg.clone()));
     let router = api::build_router(app_state.clone(), cfg.clone());

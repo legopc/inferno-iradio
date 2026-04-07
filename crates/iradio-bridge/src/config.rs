@@ -23,9 +23,10 @@ pub struct AuthConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AlsaConfig {
-    pub device_prefix: String,
-    /// Start of ALT_PORT range (each player uses base + slot*20)
-    pub alt_port_base: u16,
+    /// If true, auto-write pcm.inferno_iradio_N blocks to asoundrc_path on startup.
+    pub setup_alsa: bool,
+    /// Path to ~/.asoundrc (or equivalent). Only used when setup_alsa = true.
+    pub asoundrc_path: PathBuf,
     pub sample_rate: u32,
     pub buffer_frames: u32,
 }
@@ -63,9 +64,13 @@ impl Default for AuthConfig {
 
 impl Default for AlsaConfig {
     fn default() -> Self {
+        // Default asoundrc path: $HOME/.asoundrc (resolved at runtime)
+        let asoundrc = std::env::var("HOME")
+            .map(|h| PathBuf::from(h).join(".asoundrc"))
+            .unwrap_or_else(|_| PathBuf::from("/var/home/core/.asoundrc"));
         Self {
-            device_prefix: "iradio".to_string(),
-            alt_port_base: 6100,
+            setup_alsa: false,
+            asoundrc_path: asoundrc,
             sample_rate: 48000,
             buffer_frames: 4096,
         }
@@ -108,8 +113,8 @@ impl Config {
             "max_players": self.max_players,
             "auth": { "enabled": self.auth.enabled },
             "alsa": {
-                "device_prefix": self.alsa.device_prefix,
-                "alt_port_base": self.alsa.alt_port_base,
+                "setup_alsa": self.alsa.setup_alsa,
+                "asoundrc_path": self.alsa.asoundrc_path.to_string_lossy(),
                 "sample_rate": self.alsa.sample_rate,
                 "buffer_frames": self.alsa.buffer_frames,
             },

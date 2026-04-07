@@ -35,7 +35,7 @@ pub fn spawn_player(
     config: &Config,
 ) -> (Uuid, PlayerInfo, PlayerHandle) {
     let id = Uuid::new_v4();
-    let info = PlayerInfo::new(id, slot, name.clone(), url.clone(), &config.alsa.device_prefix);
+    let info = PlayerInfo::new(id, slot, name.clone(), url.clone());
 
     let (stop_tx, stop_rx) = oneshot::channel::<()>();
     let cfg = config.clone();
@@ -71,7 +71,7 @@ async fn run_player(
 ) {
     info!("player[{}] slot={} starting: {}", id, slot, url);
 
-    let dev_str = device_name(&cfg.alsa.device_prefix, slot, cfg.alsa.alt_port_base);
+    let dev_str = device_name(slot);
 
     let alsa_result = InfernoAlsaDevice::open(&dev_str, cfg.alsa.sample_rate, cfg.alsa.buffer_frames);
     let alsa = match alsa_result {

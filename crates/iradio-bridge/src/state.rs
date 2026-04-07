@@ -52,7 +52,7 @@ pub struct PlayerInfo {
 }
 
 impl PlayerInfo {
-    pub fn new(id: Uuid, slot: usize, name: String, url: String, prefix: &str) -> Self {
+    pub fn new(id: Uuid, slot: usize, name: String, url: String) -> Self {
         let ch_base = ((slot - 1) * 2 + 1) as u32;
         Self {
             id,
@@ -61,7 +61,7 @@ impl PlayerInfo {
             url,
             state: PlayerState::Buffering,
             dante_tx_channels: [ch_base, ch_base + 1],
-            alsa_device: format!("{}-{}", prefix, slot),
+            alsa_device: format!("inferno_iradio_{}", slot),
             started_at: chrono::Utc::now(),
             error: None,
         }
