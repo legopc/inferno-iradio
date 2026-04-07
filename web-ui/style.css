@@ -607,8 +607,13 @@ ___BEGIN___COMMAND_DONE_MARKER___0
 
 .station-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
+  align-items: center;
+}
+.station-actions .btn {
+  min-width: 36px;
+  justify-content: center;
 }
 
 /* Codec / bitrate badge */
@@ -783,12 +788,15 @@ ___BEGIN___COMMAND_DONE_MARKER___0
   gap: 8px;
   flex: 1;
   flex-wrap: wrap;
+  align-items: center;
 }
+/* override the global width:100% from .form-input inside flex row */
+.quick-play-controls .form-input { width: auto; }
 .quick-play-controls .input-url  { flex: 1 1 220px; min-width: 0; }
 .quick-play-controls .input-name { flex: 0 1 180px; min-width: 0; }
 @media (max-width: 640px) {
   .quick-play-controls .input-url,
-  .quick-play-controls .input-name { flex: 1 1 100%; }
+  .quick-play-controls .input-name { flex: 1 1 100%; width: 100%; }
 }
 
 /* ── Station rows – tighten on small screens ─────────────────────────────── */

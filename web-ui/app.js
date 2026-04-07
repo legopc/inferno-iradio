@@ -288,8 +288,8 @@ function renderStationRow(s, isFavourite) {
   const codecBadge = s.codec ? `<span class="codec-badge ${codec}">${esc(s.codec)}</span>` : '';
   const bitrateText = s.bitrate ? `${s.bitrate}k` : '';
   const favBtn = isFavourite
-    ? `<button class="btn btn-sm btn-danger" onclick="removeFavourite('${esc(s.id)}')">✕</button>`
-    : `<button class="btn btn-sm" onclick="addFavourite(event, ${JSON.stringify(JSON.stringify(s))})" title="Save">⭐</button>`;
+    ? `<button class="btn btn-danger btn-sm" onclick="removeFavourite('${esc(s.id)}')">✕ Remove</button>`
+    : `<button class="btn btn-sm" onclick="addFavourite(event, ${JSON.stringify(JSON.stringify(s))})" title="Save to favourites">⭐</button>`;
 
   const favicon = s.favicon
     ? `<img class="station-favicon" src="${esc(s.favicon)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="">`
@@ -308,7 +308,7 @@ function renderStationRow(s, isFavourite) {
       </div>
       <div class="station-actions">
         ${favBtn}
-        <button class="btn btn-sm btn-primary" onclick='playStation(${JSON.stringify(s)})'>▶</button>
+        <button class="btn btn-primary" onclick='playStation(${JSON.stringify(s)})'>▶ Play</button>
       </div>
     </div>`;
 }
