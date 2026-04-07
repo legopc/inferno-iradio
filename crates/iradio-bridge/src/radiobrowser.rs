@@ -55,20 +55,18 @@ impl RadioBrowserClient {
         Self { client, base_url }
     }
 
-    async fn resolve_api_url(client: &Client) -> String {
-        // Try DNS resolution of all.api.radio-browser.info
+    async fn resolve_api_url(_client: &Client) -> String {
         match tokio::net::lookup_host(format!("{}:443", RADIOBROWSER_DNS)).await {
             Ok(mut addrs) => {
-                if let Some(addr) = addrs.next() {
-                    // Use the IP to avoid DNS lookup on every request
-                    return format!("https://{}/json", addr.ip());
+                if addrs.next().is_some() {
+                    return format!("https://{}/json", RADIOBROWSER_DNS);
                 }
+                tracing::warn!("RadioBrowser DNS returned no addresses, falling back to de1");
             }
             Err(e) => {
-                tracing::warn!("RadioBrowser DNS lookup failed: {}", e);
+                tracing::warn!("RadioBrowser DNS lookup failed ({}), falling back to de1", e);
             }
         }
-        // Fallback to well-known server
         "https://de1.api.radio-browser.info/json".to_string()
     }
 
