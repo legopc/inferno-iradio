@@ -56,6 +56,12 @@
       <div class="card-header">
         <span>Active Players</span>
         <div class="btn-group">
+          <div class="global-vol-row">
+            <span class="volume-label">🔊 Default</span>
+            <input type="range" class="volume-slider" id="globalVolSlider" min="0" max="100" value="80"
+              oninput="onGlobalVolumeChange(this)">
+            <span class="volume-value" id="globalVolLabel">80%</span>
+          </div>
           <button class="btn btn-sm btn-primary" onclick="refreshPlayers()">↻ Refresh</button>
         </div>
       </div>

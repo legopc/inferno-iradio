@@ -56,11 +56,19 @@ body {
 .card-header {
   padding: 10px 16px;
   border-bottom: 1px solid #e8e8e8;
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
 }
 .card-title { font-weight: 700; font-size: 0.88rem; letter-spacing: -0.1px; }
 .card-body { padding: 14px 16px; }
 .card-body-flush { padding: 0; }
+
+/* Global default volume row in card header */
+.global-vol-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.global-vol-row .volume-slider { width: 100px; }
 
 /* ── Service grid ────────────────────────────────────────────────────────── */
 .svc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }

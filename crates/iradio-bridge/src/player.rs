@@ -37,12 +37,14 @@ pub fn spawn_player(
     url: String,
     state: SharedState,
     config: &Config,
+    initial_volume: f32,
 ) -> (Uuid, PlayerInfo, PlayerHandle) {
     let id = Uuid::new_v4();
-    let info = PlayerInfo::new(id, slot, name.clone(), url.clone());
+    let mut info = PlayerInfo::new(id, slot, name.clone(), url.clone());
+    info.volume = initial_volume.clamp(0.0, 1.0);
 
     let (stop_tx, stop_rx) = oneshot::channel::<()>();
-    let (vol_tx, vol_rx) = watch::channel(1.0f32);
+    let (vol_tx, vol_rx) = watch::channel(initial_volume.clamp(0.0, 1.0));
     let cfg = config.clone();
     let state_clone = state.clone();
     let id_clone = id;
@@ -105,7 +107,7 @@ async fn run_player(
         fetch_stop_rx,
     );
 
-    // Wait for initial buffer fill (up to 5s)
+    // Wait for initial buffer fill (up to 5s), feeding silence to keep ALSA pipeline alive
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {
         {
@@ -118,13 +120,17 @@ async fn run_player(
             warn!("player[{}] buffer fill timeout", id);
             break;
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        alsa.write_silence();
+        tokio::time::sleep(Duration::from_millis(50)).await;
     }
 
     set_player_state(&state, id, PlayerState::Playing).await;
     info!("player[{}] playing on ALSA device {}", id, dev_str);
 
-    // Decode + write loop runs in a blocking thread
+    // Prime the ALSA pipeline with silence to prevent Dante echo on connect
+    alsa.write_silence();
+
+    // Decode + write loop
     let buffer_clone = buffer.clone();
     let sample_rate = cfg.alsa.sample_rate;
     let id_loop = id;
@@ -135,7 +141,8 @@ async fn run_player(
         // Read a chunk from buffer
         let chunk = crate::stream::read_bytes(&buffer_clone, 64 * 1024);
         if chunk.is_empty() {
-            tokio::time::sleep(Duration::from_millis(20)).await;
+            // Keep ALSA fed with silence to prevent xrun while stream is stalled
+            alsa.write_silence();
 
             // Check for stop signal
             match stop_rx.try_recv() {

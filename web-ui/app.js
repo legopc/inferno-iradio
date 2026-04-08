@@ -6,7 +6,8 @@ let players = [];
 let favourites = [];
 let searchDebounceTimer = null;
 let pendingStation = null;
-let maxSlots = 4; // updated from /health on load
+let maxSlots = 4;
+let defaultVolume = 0.8; // pre-play default — prevents blasting on new stream
 
 // ── Initialisation ─────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -111,6 +112,12 @@ async function stopPlayer(id) {
   }
 }
 
+function onGlobalVolumeChange(slider) {
+  defaultVolume = slider.value / 100;
+  const el = document.getElementById('globalVolLabel');
+  if (el) el.textContent = slider.value + '%';
+}
+
 function onVolumeChange(slider, playerId) {
   const el = document.getElementById('vol-' + playerId);
   if (el) el.textContent = slider.value + '%';
@@ -196,7 +203,7 @@ async function createPlayer(station, slot) {
     const r = await fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: station.url, name: station.name, slot }),
+      body: JSON.stringify({ url: station.url, name: station.name, slot, volume: defaultVolume }),
     });
     if (!r.ok) {
       const err = await r.json();

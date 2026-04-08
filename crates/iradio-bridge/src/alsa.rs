@@ -5,11 +5,10 @@ pub struct InfernoAlsaDevice {
     pcm: PCM,
     pub sample_rate: u32,
     pub channels: u32,
+    pub buffer_frames: u32,
 }
 
 /// Build the ALSA device name for a given player slot.
-/// Uses the named PCM `pcm.inferno_iradio_N` defined in ~/.asoundrc
-/// (written by `alsa_setup::ensure_iradio_alsa` on startup).
 pub fn device_name(slot: usize) -> String {
     format!("inferno_iradio_{}", slot)
 }
@@ -35,17 +34,34 @@ impl InfernoAlsaDevice {
             pcm,
             sample_rate,
             channels: 2,
+            buffer_frames,
         })
     }
 
     /// Write interleaved S32 samples (L, R, L, R, ...).
-    /// Returns number of frames written, or error.
+    /// On xrun (EPIPE/EIO), recovers and retries once.
     pub fn write_frames(&self, samples: &[i32]) -> anyhow::Result<usize> {
         let io = self.pcm.io_i32()?;
-        let frames = io
-            .writei(samples)
-            .map_err(|e| anyhow::anyhow!("ALSA write failed: {}", e))?;
-        Ok(frames)
+        match io.writei(samples) {
+            Ok(n) => Ok(n),
+            Err(e) => {
+                // Try to recover from xrun (buffer underrun = EPIPE)
+                if let Err(re) = self.pcm.recover(e.errno() as i32, false) {
+                    return Err(anyhow::anyhow!("ALSA write+recover failed: {} / {}", e, re));
+                }
+                // Retry once after recovery
+                match io.writei(samples) {
+                    Ok(n) => Ok(n),
+                    Err(e2) => Err(anyhow::anyhow!("ALSA write failed after recovery: {}", e2)),
+                }
+            }
+        }
+    }
+
+    /// Write one period of silence to keep the ALSA pipeline fed.
+    pub fn write_silence(&self) {
+        let silence = vec![0i32; (self.buffer_frames * self.channels) as usize];
+        let _ = self.write_frames(&silence);
     }
 
     pub fn drain(&self) {

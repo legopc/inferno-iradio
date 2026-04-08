@@ -14,9 +14,13 @@ use uuid::Uuid;
 pub struct CreatePlayerRequest {
     pub url: String,
     pub name: String,
-    /// Specific slot (1-based). If omitted, the next free slot is used.
     pub slot: Option<usize>,
+    /// Initial volume 0.0–1.0. Defaults to 0.8 to protect ears.
+    #[serde(default = "default_create_volume")]
+    pub volume: f32,
 }
+
+fn default_create_volume() -> f32 { 0.8 }
 
 #[derive(Deserialize)]
 pub struct SetVolumeRequest {
@@ -99,6 +103,7 @@ pub async fn create_player(
         body.url,
         ctx.state.clone(),
         &ctx.state.config,
+        body.volume.clamp(0.0, 1.0),
     );
 
     ctx.state.players.write().await.insert(id, (info.clone(), handle));
