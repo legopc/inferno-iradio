@@ -1,3 +1,4 @@
+use crate::audio;
 use crate::config::Config;
 use crate::slot_keeper::SlotSender;
 use crate::state::{PlayerInfo, PlayerState, SharedState};
@@ -14,7 +15,8 @@ use uuid::Uuid;
 pub struct PlayerHandle {
     stop_tx: Option<oneshot::Sender<()>>,
     task: Option<tokio::task::JoinHandle<()>>,
-    vol_tx: watch::Sender<f32>,
+    pub vol_tx: watch::Sender<f32>,
+    pub gain_tx: watch::Sender<f32>,
 }
 
 impl PlayerHandle {
@@ -29,6 +31,10 @@ impl PlayerHandle {
 
     pub fn set_volume(&self, volume: f32) {
         let _ = self.vol_tx.send(volume.clamp(0.0, 1.0));
+    }
+
+    pub fn set_gain(&self, gain_db: f32) {
+        let _ = self.gain_tx.send(gain_db.clamp(-6.0, 6.0));
     }
 }
 
@@ -49,18 +55,20 @@ pub fn spawn_player(
 
     let (stop_tx, stop_rx) = oneshot::channel::<()>();
     let (vol_tx, vol_rx) = watch::channel(initial_volume.clamp(0.0, 1.0));
+    let (gain_tx, gain_rx) = watch::channel(0.0_f32);
     let cfg = config.clone();
     let state_clone = state.clone();
     let id_clone = id;
 
     let task = tokio::spawn(run_player(
-        id_clone, slot, url, name, cfg, state_clone, stop_rx, vol_rx, slot_tx,
+        id_clone, slot, url, name, cfg, state_clone, stop_rx, vol_rx, gain_rx, slot_tx,
     ));
 
     let handle = PlayerHandle {
         stop_tx: Some(stop_tx),
         task: Some(task),
         vol_tx,
+        gain_tx,
     };
 
     (id, info, handle)
@@ -75,6 +83,7 @@ async fn run_player(
     state: SharedState,
     stop_rx: oneshot::Receiver<()>,
     vol_rx: watch::Receiver<f32>,
+    gain_rx: watch::Receiver<f32>,
     slot_tx: SlotSender,
 ) {
     info!("player[{}] slot={} starting: {}", id, slot, url);
@@ -96,18 +105,20 @@ async fn run_player(
         .unwrap_or_default();
 
     let (fetch_stop_tx, fetch_stop_rx) = oneshot::channel();
+    let (title_tx, mut title_rx) = watch::channel::<Option<String>>(None);
     let _fetch_task = crate::stream::start_stream_fetch(
         url.clone(),
         buffer.clone(),
         client,
         fetch_stop_rx,
+        Some(title_tx),
     );
 
     // Wait for initial buffer fill (up to 5 s).
     // The slot keeper keeps ALSA fed with silence during this time.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {
-        if buffer.lock().unwrap().len() >= 8 * 1024 {
+        if buffer.lock().unwrap().len() >= 4 * 1024 {
             break;
         }
         if tokio::time::Instant::now() > deadline {
@@ -135,7 +146,44 @@ async fn run_player(
             biased;
 
             // Stop signal from API
-            _ = &mut stop_rx => break,
+            _ = &mut stop_rx => {
+                // Graceful 50ms fade-out: send fading audio frames
+                const FADE_STEPS: usize = 10; // 10 steps × ~5ms each ≈ 50ms
+                let mut fade_vol = *vol_rx.borrow();
+                let step = fade_vol / FADE_STEPS as f32;
+                for _ in 0..FADE_STEPS {
+                    fade_vol = (fade_vol - step).max(0.0);
+                    match tokio::time::timeout(
+                        Duration::from_millis(8),
+                        pcm_rx.recv()
+                    ).await {
+                        Ok(Some(mut samples)) => {
+                            for s in &mut samples { *s = (*s as f32 * fade_vol) as i32; }
+                            let _ = slot_tx.tx.send(samples).await;
+                        }
+                        _ => break,
+                    }
+                }
+                break;
+            }
+
+            // ICY title update
+            _ = title_rx.changed() => {
+                let title = title_rx.borrow().clone();
+                if let Some(ref title_str) = title {
+                    // Update PlayerInfo.icy_title in state
+                    let mut players = state.players.write().await;
+                    if let Some((info, _)) = players.get_mut(&id) {
+                        info.icy_title = Some(title_str.clone());
+                    }
+                    drop(players);
+                    // Push WsEvent::IcyMeta via EventHub
+                    state.events.send(crate::events::WsEvent::IcyMeta {
+                        slot,
+                        title: title_str.clone(),
+                    });
+                }
+            }
 
             // Decoded PCM ready
             maybe_samples = pcm_rx.recv() => {
@@ -148,6 +196,13 @@ async fn run_player(
                                 *s = (*s as f32 * vol) as i32;
                             }
                         }
+
+                        // Apply per-slot gain staging and soft limiting
+                        let gain_db = *gain_rx.borrow();
+                        if gain_db.abs() > 0.01 {
+                            audio::apply_gain_and_limit(&mut samples, gain_db);
+                        }
+
                         // Forward to slot keeper → ALSA
                         if slot_tx.tx.send(samples).await.is_err() {
                             error!("player[{}] slot sender gone", id);
@@ -175,9 +230,17 @@ async fn run_player(
 }
 
 async fn set_player_state(state: &SharedState, id: Uuid, new_state: PlayerState) {
-    let mut players = state.players.write().await;
-    if let Some((info, _)) = players.get_mut(&id) {
-        info.state = new_state;
+    let player_json = {
+        let mut players = state.players.write().await;
+        if let Some((info, _)) = players.get_mut(&id) {
+            info.state = new_state;
+            Some(serde_json::to_value(&*info).unwrap_or_default())
+        } else {
+            None
+        }
+    };
+    if let Some(json) = player_json {
+        state.events.send(crate::events::WsEvent::PlayerUpdate { player: json });
     }
 }
 

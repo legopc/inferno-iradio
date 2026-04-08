@@ -19,11 +19,13 @@ pub type SharedBuffer = Arc<Mutex<VecDeque<u8>>>;
 /// Start a streaming HTTP fetch task. Writes bytes into `buffer`.
 /// Retries indefinitely on EOF/error with exponential backoff (capped at 10 s).
 /// Stops when `stop_rx` is signalled.
+/// `title_tx` is an optional watch channel to push ICY metadata titles to.
 pub fn start_stream_fetch(
     url: String,
     buffer: SharedBuffer,
     client: reqwest::Client,
     mut stop_rx: tokio::sync::oneshot::Receiver<()>,
+    title_tx: Option<tokio::sync::watch::Sender<Option<String>>>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut attempt = 0u32;
@@ -38,7 +40,7 @@ pub fn start_stream_fetch(
             debug!("stream: connecting to {} (attempt {})", effective_url, attempt + 1);
 
             let result = tokio::select! {
-                r = fetch_stream(&effective_url, &buffer, &client) => r,
+                r = fetch_stream(&effective_url, &buffer, &client, title_tx.clone()) => r,
                 _ = &mut stop_rx => {
                     debug!("stream: stop requested");
                     return;
@@ -103,6 +105,8 @@ struct IcyStripper {
     audio_remaining: usize,
     /// Metadata bytes remaining to skip
     meta_remaining: usize,
+    /// Accumulates metadata bytes for parsing
+    meta_buf: Vec<u8>,
 }
 
 impl IcyStripper {
@@ -111,13 +115,15 @@ impl IcyStripper {
             metaint,
             audio_remaining: metaint,
             meta_remaining: 0,
+            meta_buf: Vec::new(),
         }
     }
 
     fn process(&mut self, input: &[u8], output: &mut Vec<u8>) {
         for &byte in input {
             if self.meta_remaining > 0 {
-                // Inside a metadata block — discard
+                // Inside a metadata block — collect bytes
+                self.meta_buf.push(byte);
                 self.meta_remaining -= 1;
             } else if self.audio_remaining == 0 {
                 // This byte is the length prefix: L × 16 = metadata block size
@@ -130,12 +136,33 @@ impl IcyStripper {
             }
         }
     }
+
+    fn take_title(&mut self) -> Option<String> {
+        if self.meta_buf.is_empty() {
+            return None;
+        }
+        let raw = String::from_utf8_lossy(&self.meta_buf).to_string();
+        self.meta_buf.clear();
+        // ICY metadata format: "StreamTitle='Artist - Track';StreamUrl='...';"
+        // Extract StreamTitle value
+        if let Some(start) = raw.find("StreamTitle='") {
+            let rest = &raw[start + 13..];
+            if let Some(end) = rest.find("';") {
+                let title = rest[..end].trim().to_string();
+                if !title.is_empty() {
+                    return Some(title);
+                }
+            }
+        }
+        None
+    }
 }
 
 async fn fetch_stream(
     url: &str,
     buffer: &SharedBuffer,
     client: &reqwest::Client,
+    title_tx: Option<tokio::sync::watch::Sender<Option<String>>>,
 ) -> Result<(Option<String>, usize), (anyhow::Error, Option<String>, usize)> {
     let response = client
         .get(url)
@@ -167,12 +194,12 @@ async fn fetch_stream(
         final_url.as_deref().unwrap_or(url)
     );
 
-    // Detect ICY metadata injection interval
+    // Detect ICY metadata injection interval (filter out metaint=0 bug)
     let metaint = response
         .headers()
         .get("icy-metaint")
         .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.parse::<usize>().ok());
+        .and_then(|s| s.parse::<usize>().ok().filter(|&n| n > 0));
 
     if let Some(m) = metaint {
         debug!("stream: ICY metadata active, metaint={} bytes", m);
@@ -193,6 +220,12 @@ async fn fetch_stream(
         if let Some(ref mut s) = stripper {
             let mut clean = Vec::with_capacity(chunk.len());
             s.process(&chunk, &mut clean);
+            // Push any new ICY title
+            if let Some(title) = s.take_title() {
+                if let Some(ref tx) = title_tx {
+                    let _ = tx.send(Some(title));
+                }
+            }
             buf.extend(clean.iter());
         } else {
             buf.extend(chunk.iter());
