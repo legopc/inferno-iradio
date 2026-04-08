@@ -87,10 +87,10 @@ async fn run_player(
         .no_gzip()
         .no_brotli()
         .no_deflate()
-        // Connection timeout (not the same as the overall request timeout below)
+        // Connection-only timeout — does NOT kill an ongoing stream after N seconds.
+        // Do NOT use .timeout() here: it sets a total-request deadline which would
+        // terminate a live radio stream after N seconds ("error decoding response body").
         .connect_timeout(Duration::from_secs(10))
-        // Overall per-request read deadline — prevents silent hangs on bad streams
-        .timeout(Duration::from_secs(30))
         .user_agent("VLC/3.0.20 LibVLC/3.0.20")
         .build()
         .unwrap_or_default();
