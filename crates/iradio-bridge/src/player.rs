@@ -81,7 +81,17 @@ async fn run_player(
 
     let buffer: SharedBuffer = Arc::new(Mutex::new(VecDeque::new()));
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(cfg.radiobrowser.request_timeout_secs))
+        // Never auto-decompress — audio streams are raw bytes, not gzip/brotli.
+        // reqwest's decompressor will corrupt MP3/AAC data and emit "error decoding
+        // response body" if the server sends any Content-Encoding header.
+        .no_gzip()
+        .no_brotli()
+        .no_deflate()
+        // Connection timeout (not the same as the overall request timeout below)
+        .connect_timeout(Duration::from_secs(10))
+        // Overall per-request read deadline — prevents silent hangs on bad streams
+        .timeout(Duration::from_secs(30))
+        .user_agent("VLC/3.0.20 LibVLC/3.0.20")
         .build()
         .unwrap_or_default();
 

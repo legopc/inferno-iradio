@@ -3,11 +3,15 @@ use futures_util::StreamExt;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 const RING_BUFFER_CAPACITY: usize = 512 * 1024; // 512 KB — larger buffer for smoother decode
 const RETRY_BACKOFF_BASE_MS: u64 = 500;
 const RETRY_BACKOFF_MAX_MS: u64 = 10_000;
+/// Minimum bytes received before we consider the effective_url "trustworthy".
+/// If a stream errors before this threshold, we reset to the original URL so
+/// a pre-roll ad can't permanently hijack the reconnect target.
+const EFFECTIVE_URL_TRUST_BYTES: usize = 64 * 1024; // 64 KB
 
 /// Shared ring buffer between fetcher and decoder
 pub type SharedBuffer = Arc<Mutex<VecDeque<u8>>>;
@@ -23,8 +27,11 @@ pub fn start_stream_fetch(
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut attempt = 0u32;
+        // original_url never changes — used to reset if we get stuck on a pre-roll URL
+        let original_url = url.clone();
         // After the first successful connect we use the final (post-redirect) URL
         // so reconnects skip any pre-roll ad served by redirect landing pages.
+        // Only trusted once EFFECTIVE_URL_TRUST_BYTES have been received.
         let mut effective_url = url.clone();
 
         loop {
@@ -39,23 +46,36 @@ pub fn start_stream_fetch(
             };
 
             match result {
-                Ok(final_url) => {
-                    // Update effective URL so we skip pre-roll on reconnect
+                Ok((final_url, bytes_received)) => {
+                    // Only trust the redirect URL if we received enough data to be sure
+                    // it's the real stream and not a pre-roll ad server
                     if let Some(u) = final_url {
-                        if u != effective_url {
-                            debug!("stream: using direct URL for reconnects: {}", u);
+                        if u != effective_url && bytes_received >= EFFECTIVE_URL_TRUST_BYTES {
+                            info!("stream: using direct URL for reconnects: {}", u);
                             effective_url = u;
                         }
                     }
-                    debug!("stream: clean EOF, reconnecting");
+                    debug!("stream: clean EOF after {} bytes, reconnecting", bytes_received);
                     // Don't clear the buffer on clean EOF — let symphonia continue smoothly
                     attempt = 0;
                 }
-                Err((e, final_url)) => {
-                    // Update effective URL even on error (we at least got the redirect)
-                    if let Some(u) = final_url {
-                        if u != effective_url {
-                            effective_url = u;
+                Err((e, final_url, bytes_received)) => {
+                    if bytes_received >= EFFECTIVE_URL_TRUST_BYTES {
+                        // We got enough data — the redirect target is the real stream
+                        if let Some(u) = final_url {
+                            if u != effective_url {
+                                effective_url = u;
+                            }
+                        }
+                    } else {
+                        // Too little data — likely a pre-roll or bad redirect.
+                        // Reset to original URL so we don't get stuck.
+                        if effective_url != original_url {
+                            warn!(
+                                "stream: only {} bytes before error, resetting to original URL",
+                                bytes_received
+                            );
+                            effective_url = original_url.clone();
                         }
                     }
                     let backoff = (RETRY_BACKOFF_BASE_MS * (1u64 << attempt.min(5)))
@@ -116,18 +136,36 @@ async fn fetch_stream(
     url: &str,
     buffer: &SharedBuffer,
     client: &reqwest::Client,
-) -> Result<Option<String>, (anyhow::Error, Option<String>)> {
+) -> Result<(Option<String>, usize), (anyhow::Error, Option<String>, usize)> {
     let response = client
         .get(url)
+        // Tell servers not to compress — we need raw audio bytes
+        .header("Accept-Encoding", "identity")
         .header("Icy-MetaData", "1")
         .send()
         .await
-        .map_err(|e| (e.into(), None))?
+        .map_err(|e| (e.into(), None, 0usize))?
         .error_for_status()
-        .map_err(|e| (e.into(), None))?;
+        .map_err(|e| (e.into(), None, 0usize))?;
 
     // Capture the final URL after redirects so reconnects skip pre-roll ads
     let final_url = Some(response.url().to_string());
+
+    // Log connection details for diagnostics
+    let status = response.status();
+    let content_type = response.headers().get("content-type")
+        .and_then(|v| v.to_str().ok()).unwrap_or("?").to_string();
+    let content_encoding = response.headers().get("content-encoding")
+        .and_then(|v| v.to_str().ok()).unwrap_or("none").to_string();
+    let icy_name = response.headers().get("icy-name")
+        .and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    let server = response.headers().get("server")
+        .and_then(|v| v.to_str().ok()).unwrap_or("?").to_string();
+    info!(
+        "stream: connected {} | type={} enc={} icy-name={:?} server={} url={}",
+        status, content_type, content_encoding, icy_name, server,
+        final_url.as_deref().unwrap_or(url)
+    );
 
     // Detect ICY metadata injection interval
     let metaint = response
@@ -142,9 +180,11 @@ async fn fetch_stream(
 
     let mut stripper = metaint.map(IcyStripper::new);
     let mut stream = response.bytes_stream();
+    let mut bytes_received: usize = 0;
 
     while let Some(chunk) = stream.next().await {
-        let chunk: Bytes = chunk.map_err(|e| (e.into(), final_url.clone()))?;
+        let chunk: Bytes = chunk.map_err(|e| (e.into(), final_url.clone(), bytes_received))?;
+        bytes_received += chunk.len();
         let mut buf = buffer.lock().unwrap();
         // Discard oldest bytes if buffer is full
         while buf.len() + chunk.len() > RING_BUFFER_CAPACITY {
@@ -159,5 +199,5 @@ async fn fetch_stream(
         }
     }
 
-    Ok(final_url)
+    Ok((final_url, bytes_received))
 }

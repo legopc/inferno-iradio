@@ -3,139 +3,124 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Inferno · Internet Radio</title>
+  <title>INFERNO·IRADIO</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-<!-- ── Header ─────────────────────────────────────────────────────────────── -->
-<header class="page-header">
-  <div class="header-left">
-    <span class="header-icon">📻</span>
-    <div>
-      <div class="page-title">Internet Radio</div>
-      <div class="page-subtitle">Inferno AoIP Bridge</div>
-    </div>
-  </div>
-  <div class="node-pills" id="statusPills">
-    <span class="pill" id="pillApi">
-      <span class="pill-dot" id="pillApiDot"></span>
-      <span id="pillApiLabel">API</span>
-    </span>
-  </div>
-</header>
 
 <!-- ── Toast container ────────────────────────────────────────────────────── -->
 <div id="toastContainer" class="toast-container"></div>
 
 <!-- ── Slot picker modal ──────────────────────────────────────────────────── -->
-<dialog id="slotModal" class="diff-modal">
-  <div class="modal-header">
-    <span class="modal-title">Choose Player Slot</span>
-    <button class="btn btn-sm" onclick="document.getElementById('slotModal').close()">✕</button>
+<dialog id="slotModal" class="slot-modal">
+  <div class="slot-modal-header">
+    <div class="slot-modal-title">
+      <span class="slot-modal-label">SELECT CHANNEL</span>
+      <span class="slot-modal-station" id="slotModalName"></span>
+    </div>
+    <button class="modal-close-btn" onclick="document.getElementById('slotModal').close()">✕</button>
   </div>
-  <div class="modal-body">
-    <p class="text-muted" id="slotModalStation">Select a slot to play <strong id="slotModalName"></strong></p>
-    <div class="slot-grid" id="slotGrid"></div>
-  </div>
+  <div class="slot-modal-grid" id="slotGrid"></div>
 </dialog>
 
-<!-- ── Tab navigation ─────────────────────────────────────────────────────── -->
-<div class="tab-nav">
-  <button class="tab-btn tab-btn-active" onclick="switchTab('playing')" id="tab-playing">🎵 Now Playing</button>
-  <button class="tab-btn" onclick="switchTab('search')" id="tab-search">🔍 Search</button>
-  <button class="tab-btn" onclick="switchTab('favourites')" id="tab-favourites">⭐ Favourites</button>
-</div>
+<!-- ── App shell ──────────────────────────────────────────────────────────── -->
+<div class="app-shell">
 
-<!-- ── Main content ───────────────────────────────────────────────────────── -->
-<main class="main-content">
-
-  <!-- Now Playing ─────────────────────────────────────────────────────────── -->
-  <section id="section-playing" class="tab-section">
-    <div class="card">
-      <div class="card-header">
-        <span>Active Players</span>
-        <div class="btn-group">
-          <div class="global-vol-row">
-            <span class="volume-label">🔊 Default</span>
-            <input type="range" class="volume-slider" id="globalVolSlider" min="0" max="100" value="80"
-              oninput="onGlobalVolumeChange(this)">
-            <span class="volume-value" id="globalVolLabel">80%</span>
-          </div>
-          <button class="btn btn-sm btn-primary" onclick="refreshPlayers()">↻ Refresh</button>
-        </div>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-brand">
+      <div class="brand-bars" id="headerBars">
+        <span></span><span></span><span></span><span></span><span></span>
       </div>
-      <div class="card-body" id="playerList">
-        <div class="loading-text"><span class="spinner"></span>Loading players…</div>
+      <div class="brand-text">
+        <span class="brand-name">INFERNO<span class="brand-dot">·</span>IRADIO</span>
+        <span class="brand-sub">AoIP BROADCAST BRIDGE</span>
       </div>
     </div>
-
-    <div class="card" style="margin-top:16px">
-      <div class="card-header">Quick Play</div>
-      <div class="card-body">
-        <div class="form-row">
-          <label class="row-label">Stream URL</label>
-          <div class="quick-play-controls">
-            <input type="text" id="quickUrl" class="form-input input-url" placeholder="https://…">
-            <input type="text" id="quickName" class="form-input input-name" placeholder="Station name">
-            <button class="btn btn-primary" onclick="quickPlay()">▶ Play</button>
-          </div>
-        </div>
+    <div class="header-status">
+      <span class="api-status" id="apiStatus">[CONNECTING…]</span>
+      <div class="default-vol-wrap">
+        <span class="vol-label-inline">DEFAULT VOL</span>
+        <input type="range" class="vol-slider-inline" id="globalVolSlider" min="0" max="100" value="80"
+          oninput="onGlobalVolumeChange(this)">
+        <span class="vol-val-inline" id="globalVolLabel">80%</span>
       </div>
     </div>
-  </section>
+  </header>
 
-  <!-- Search ───────────────────────────────────────────────────────────────── -->
-  <section id="section-search" class="tab-section hidden">
-    <div class="card">
-      <div class="card-header">Search Stations</div>
-      <div class="card-body">
-        <div class="search-bar">
-          <input type="text" id="searchInput" placeholder="Search by name, genre…" oninput="debouncedSearch()">
-          <button class="btn btn-primary" onclick="doSearch()">Search</button>
-        </div>
-        <div class="browse-filters">
-          <button class="btn btn-sm btn-secondary tab-btn-active" id="btnTop" onclick="browseTop()">Top Stations</button>
-          <div class="filter-dropdown-wrap">
-            <button class="btn btn-sm btn-secondary" id="btnTags" onclick="toggleTagsDropdown()">By Tag ▾</button>
-            <div id="tagsDropdown" class="filter-dropdown hidden"></div>
-          </div>
-          <div class="filter-dropdown-wrap">
-            <button class="btn btn-sm btn-secondary" id="btnCountries" onclick="toggleCountriesDropdown()">By Country ▾</button>
-            <div id="countriesDropdown" class="filter-dropdown hidden"></div>
-          </div>
+  <!-- Tab nav -->
+  <nav class="tab-rail">
+    <button class="rail-btn rail-active" onclick="switchTab('playing')" id="tab-playing">NOW PLAYING</button>
+    <button class="rail-btn" onclick="switchTab('search')" id="tab-search">SCAN STATIONS</button>
+    <button class="rail-btn" onclick="switchTab('favourites')" id="tab-favourites">PRESETS</button>
+  </nav>
+
+  <!-- Main -->
+  <main class="content-area">
+
+    <!-- ── Now Playing ──────────────────────────────────────────────────── -->
+    <section id="section-playing" class="tab-section">
+      <div class="channel-grid" id="playerList">
+        <div class="boot-msg">
+          <span class="boot-cursor">▮</span> NO ACTIVE CHANNELS — SCAN TO TUNE IN
         </div>
       </div>
-    </div>
 
-    <div class="card" style="margin-top:12px">
-      <div class="card-body" id="searchResults">
-        <div class="empty-state">
-          <div class="empty-icon">🔍</div>
-          <div class="empty-text">Search for stations or browse by tag / country</div>
+      <div class="quick-play-bar">
+        <span class="quick-play-label">DIRECT URL</span>
+        <input type="text" id="quickUrl" class="mono-input url-input" placeholder="http://stream.example.com/live.mp3">
+        <input type="text" id="quickName" class="mono-input name-input" placeholder="Station ID">
+        <button class="action-btn" onclick="quickPlay()">▶ TX</button>
+      </div>
+    </section>
+
+    <!-- ── Scan Stations ────────────────────────────────────────────────── -->
+    <section id="section-search" class="tab-section hidden">
+      <div class="scan-bar">
+        <div class="scan-input-wrap">
+          <span class="scan-prompt">⌕</span>
+          <input type="text" id="searchInput" class="scan-input" placeholder="SEARCH BY NAME, GENRE, COUNTRY…" oninput="debouncedSearch()">
+        </div>
+        <div class="scan-filters" id="scanFilters">
+          <button class="filter-chip filter-active" id="btnTop" onclick="browseTop()">TOP</button>
+          <button class="filter-chip" id="btnTagsDrop" onclick="toggleTagsDropdown()">TAG ▾</button>
+          <button class="filter-chip" id="btnCountriesDrop" onclick="toggleCountriesDropdown()">COUNTRY ▾</button>
+          <div id="tagsDropdown" class="scan-dropdown hidden"></div>
+          <div id="countriesDropdown" class="scan-dropdown hidden"></div>
         </div>
       </div>
-    </div>
-  </section>
-
-  <!-- Favourites ───────────────────────────────────────────────────────────── -->
-  <section id="section-favourites" class="tab-section hidden">
-    <div class="card">
-      <div class="card-header">
-        <span>Saved Favourites</span>
+      <div class="station-manifest" id="searchResults">
+        <div class="manifest-empty">
+          <span class="manifest-empty-icon">◈</span>
+          AWAITING SCAN INPUT
+        </div>
       </div>
-      <div class="card-body" id="favouritesList">
-        <div class="loading-text"><span class="spinner"></span>Loading…</div>
+    </section>
+
+    <!-- ── Presets (Favourites) ─────────────────────────────────────────── -->
+    <section id="section-favourites" class="tab-section hidden">
+      <div class="preset-bank" id="favouritesList">
+        <div class="manifest-empty">
+          <span class="manifest-empty-icon">◈</span>
+          NO PRESETS STORED — HIT ★ ON ANY STATION
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-</main>
+  </main>
 
-<!-- ── Credits ────────────────────────────────────────────────────────────── -->
-<div style="padding:24px;text-align:center;color:#6a6e73;font-size:12px">
-  Inferno Internet Radio · <a href="https://github.com/legopc/inferno-iradio" style="color:#0066cc;text-decoration:none">legopc/inferno-iradio</a>
-  · Built with Rust + Axum · RadioBrowser.info
+  <!-- Footer -->
+  <footer class="site-footer">
+    <span>INFERNO INTERNET RADIO</span>
+    <span class="footer-sep">//</span>
+    <a href="https://github.com/legopc/inferno-iradio" class="footer-link">legopc/inferno-iradio</a>
+    <span class="footer-sep">//</span>
+    <span>RUST + AXUM + RADIOBROWSER.INFO</span>
+  </footer>
+
 </div>
 
 <script src="app.js"></script>
