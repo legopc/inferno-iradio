@@ -5,14 +5,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/iradio-bridge --config /etc/iradio/config.toml
+# On the Inferno appliance the binary is installed to ~/bin and config to ~/.config/iradio/
+# For a system-level install use /usr/local/bin and /etc/iradio/config.toml
+ExecStart=%h/bin/iradio-bridge --config %h/.config/iradio/config.toml
 Restart=on-failure
 RestartSec=5
 Environment=RUST_LOG=info
-StateDirectory=iradio
-ConfigurationDirectory=iradio
-# Ensure favourites directory exists at startup
-ExecStartPre=/bin/mkdir -p /var/lib/iradio
+# Ensure data directory exists at startup
+ExecStartPre=/bin/mkdir -p %h/.local/share/iradio
 
 [Install]
 WantedBy=default.target

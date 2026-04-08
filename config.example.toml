@@ -1,14 +1,19 @@
 # iradio-bridge configuration
 # Copy to /etc/iradio/config.toml and adjust as needed.
+# All fields are optional — defaults are shown below.
 
 # TCP port the web UI and REST API listens on
 port = 8765
 
-# Maximum concurrent player slots (each = 1 stereo Dante TX pair)
+# Maximum concurrent player slots (each = 1 stereo Dante TX pair), 1–4
+# On the Inferno appliance this is managed by cockpit-inferno.
 max_players = 4
 
 # Where favourites are persisted
 favourites_path = "/var/lib/iradio/favourites.json"
+
+# Where per-slot default volumes are persisted (restored on next start)
+volumes_path = "/var/lib/iradio/volumes.json"
 
 [auth]
 # Set to true to require HTTP Basic Auth for all routes (except /api/v1/health)
