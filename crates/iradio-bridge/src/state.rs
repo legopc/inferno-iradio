@@ -47,9 +47,14 @@ pub struct PlayerInfo {
     pub dante_tx_channels: [u32; 2],
     pub alsa_device: String,
     pub started_at: chrono::DateTime<chrono::Utc>,
+    /// Volume 0.0 – 1.0 (software gain applied before ALSA write)
+    #[serde(default = "default_volume")]
+    pub volume: f32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
+
+fn default_volume() -> f32 { 1.0 }
 
 impl PlayerInfo {
     pub fn new(id: Uuid, slot: usize, name: String, url: String) -> Self {
@@ -63,6 +68,7 @@ impl PlayerInfo {
             dante_tx_channels: [ch_base, ch_base + 1],
             alsa_device: format!("inferno_iradio_{}", slot),
             started_at: chrono::Utc::now(),
+            volume: 1.0,
             error: None,
         }
     }

@@ -5,7 +5,8 @@ const API = '/api/v1';
 let players = [];
 let favourites = [];
 let searchDebounceTimer = null;
-let pendingStation = null; // station waiting for slot selection
+let pendingStation = null;
+let maxSlots = 4; // updated from /health on load
 
 // ── Initialisation ─────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -35,6 +36,7 @@ async function checkApi() {
     if (r.ok) {
       dot.className = 'pill-dot active';
       lbl.textContent = 'API v' + (data.version || '?');
+      if (data.max_players) maxSlots = data.max_players;
     } else {
       dot.className = 'pill-dot error';
     }
@@ -70,6 +72,8 @@ function renderPlayerCard(p) {
   const stateClass = p.state === 'playing' ? 'active' : p.state === 'error' ? 'error' : 'inactive';
   const dotClass = p.state === 'playing' ? 'pulse-active' : p.state === 'error' ? 'pulse-failed' : '';
   const stateLabel = p.state.charAt(0).toUpperCase() + p.state.slice(1);
+  const vol = typeof p.volume === 'number' ? p.volume : 1.0;
+  const volPct = Math.round(vol * 100);
   return `
     <div class="svc-card ${stateClass}" style="margin-bottom:8px">
       <div class="svc-header">
@@ -81,11 +85,18 @@ function renderPlayerCard(p) {
           <button class="btn btn-sm btn-danger" onclick="stopPlayer('${p.id}')">■ Stop</button>
         </div>
       </div>
-      <div class="svc-meta" style="display:flex;gap:12px;font-size:12px;color:#6a6e73;margin-top:4px">
+      <div class="svc-meta" style="display:flex;gap:12px;font-size:12px;color:#6a6e73;margin-top:4px;flex-wrap:wrap">
         <span class="slot-indicator">Slot ${p.slot}</span>
         <span><span class="dante-badge">TX ${p.dante_tx_channels[0]}–${p.dante_tx_channels[1]}</span></span>
         <span class="text-muted">${esc(p.alsa_device)}</span>
         <span class="svc-status">${stateLabel}${p.error ? ': ' + esc(p.error) : ''}</span>
+      </div>
+      <div class="volume-row">
+        <span class="volume-label">🔊 Volume</span>
+        <input type="range" class="volume-slider" min="0" max="100" value="${volPct}"
+          oninput="onVolumeChange(this,'${p.id}')"
+          onchange="setVolume('${p.id}', this.value/100)">
+        <span class="volume-value" id="vol-${p.id}">${volPct}%</span>
       </div>
     </div>`;
 }
@@ -100,6 +111,27 @@ async function stopPlayer(id) {
   }
 }
 
+function onVolumeChange(slider, playerId) {
+  const el = document.getElementById('vol-' + playerId);
+  if (el) el.textContent = slider.value + '%';
+}
+
+let volumeDebounce = {};
+async function setVolume(playerId, volume) {
+  clearTimeout(volumeDebounce[playerId]);
+  volumeDebounce[playerId] = setTimeout(async () => {
+    try {
+      await fetch(API + '/players/' + playerId + '/volume', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ volume: parseFloat(volume) }),
+      });
+    } catch (e) {
+      console.warn('setVolume failed:', e);
+    }
+  }, 80);
+}
+
 async function quickPlay() {
   const url = document.getElementById('quickUrl').value.trim();
   const name = document.getElementById('quickName').value.trim() || 'Custom Stream';
@@ -112,25 +144,31 @@ async function quickPlay() {
 // ── Play flow ─────────────────────────────────────────────────────────────
 async function startStation(station) {
   await refreshPlayers();
-  const maxSlots = 4;
   const usedSlots = new Set(players.map(p => p.slot));
   const freeSlots = [];
   for (let i = 1; i <= maxSlots; i++) {
     if (!usedSlots.has(i)) freeSlots.push(i);
   }
 
-  if (freeSlots.length === 0) {
-    toast('error', 'All player slots are in use');
+  if (freeSlots.length === 0 && maxSlots === 1) {
+    // Only one slot and it's occupied — overwrite directly
+    await createPlayer(station, 1);
     return;
   }
-  if (freeSlots.length === 1) {
+  if (freeSlots.length === maxSlots) {
+    // No occupied slots at all
+    if (maxSlots === 1) { await createPlayer(station, 1); return; }
+    showSlotPicker(station, usedSlots);
+    return;
+  }
+  if (freeSlots.length === 1 && usedSlots.size === 0) {
     await createPlayer(station, freeSlots[0]);
     return;
   }
-  showSlotPicker(station, freeSlots, usedSlots, maxSlots);
+  showSlotPicker(station, usedSlots);
 }
 
-function showSlotPicker(station, freeSlots, usedSlots, maxSlots) {
+function showSlotPicker(station, usedSlots) {
   pendingStation = station;
   document.getElementById('slotModalName').textContent = station.name;
   const grid = document.getElementById('slotGrid');
@@ -138,16 +176,16 @@ function showSlotPicker(station, freeSlots, usedSlots, maxSlots) {
   for (let s = 1; s <= maxSlots; s++) {
     const occupied = usedSlots.has(s);
     const ch = ((s - 1) * 2 + 1);
+    const occupiedPlayer = occupied ? players.find(p => p.slot === s) : null;
     const btn = document.createElement('button');
     btn.className = 'slot-btn' + (occupied ? ' occupied' : '');
-    btn.disabled = occupied;
-    btn.innerHTML = `<div>Slot ${s}</div><div class="slot-ch">TX ${ch}–${ch + 1} · iradio-${s}</div>`;
-    if (!occupied) {
-      btn.onclick = () => {
-        document.getElementById('slotModal').close();
-        createPlayer(station, s);
-      };
-    }
+    btn.innerHTML = `<div>Slot ${s}${occupied ? ' <span class="slot-overwrite-tag">⚠ overwrite</span>' : ''}</div>
+      <div class="slot-ch">TX ${ch}–${ch + 1} · iradio-${s}</div>
+      ${occupied && occupiedPlayer ? `<div class="slot-current">${esc(occupiedPlayer.name)}</div>` : ''}`;
+    btn.onclick = () => {
+      document.getElementById('slotModal').close();
+      createPlayer(station, s);
+    };
     grid.appendChild(btn);
   }
   document.getElementById('slotModal').showModal();

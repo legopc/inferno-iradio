@@ -721,8 +721,29 @@ ___BEGIN___COMMAND_DONE_MARKER___0
   font-size: 13px;
 }
 .slot-btn:hover { border-color: #0066cc; background: #f0f6ff; }
-.slot-btn.occupied { opacity: .45; cursor: not-allowed; }
+.slot-btn.occupied { opacity: .85; cursor: pointer; border-color: #f0a050; background: #fff8f0; }
+.slot-btn.occupied:hover { border-color: #d4700a; background: #fff1e0; }
 .slot-btn .slot-ch { font-size: 11px; color: #6a6e73; margin-top: 4px; }
+.slot-btn .slot-current { font-size: 11px; color: #8a6040; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+.slot-overwrite-tag { font-size: 10px; background: #f0a050; color: #fff; border-radius: 3px; padding: 1px 4px; vertical-align: middle; }
+
+/* Volume control in player card */
+.volume-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid #e8e8e8;
+}
+.volume-label { font-size: 12px; color: #6a6e73; white-space: nowrap; }
+.volume-slider {
+  flex: 1;
+  min-width: 80px;
+  accent-color: #0066cc;
+  cursor: pointer;
+}
+.volume-value { font-size: 12px; color: #151515; min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Player card slot number */
 .slot-indicator {

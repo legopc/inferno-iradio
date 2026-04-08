@@ -4,7 +4,7 @@ use crate::state::{PlayerInfo, PlayerState, SharedState};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, watch};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -12,6 +12,7 @@ use uuid::Uuid;
 pub struct PlayerHandle {
     stop_tx: Option<oneshot::Sender<()>>,
     task: Option<tokio::task::JoinHandle<()>>,
+    vol_tx: watch::Sender<f32>,
 }
 
 impl PlayerHandle {
@@ -23,10 +24,13 @@ impl PlayerHandle {
             let _ = tokio::time::timeout(Duration::from_secs(5), task).await;
         }
     }
+
+    pub fn set_volume(&self, volume: f32) {
+        let _ = self.vol_tx.send(volume.clamp(0.0, 1.0));
+    }
 }
 
 /// Spawn a player task for the given slot.
-/// Returns a PlayerHandle for stopping and the initial PlayerInfo.
 pub fn spawn_player(
     slot: usize,
     name: String,
@@ -38,6 +42,7 @@ pub fn spawn_player(
     let info = PlayerInfo::new(id, slot, name.clone(), url.clone());
 
     let (stop_tx, stop_rx) = oneshot::channel::<()>();
+    let (vol_tx, vol_rx) = watch::channel(1.0f32);
     let cfg = config.clone();
     let state_clone = state.clone();
     let id_clone = id;
@@ -50,11 +55,13 @@ pub fn spawn_player(
         cfg,
         state_clone,
         stop_rx,
+        vol_rx,
     ));
 
     let handle = PlayerHandle {
         stop_tx: Some(stop_tx),
         task: Some(task),
+        vol_tx,
     };
 
     (id, info, handle)
@@ -68,6 +75,7 @@ async fn run_player(
     cfg: Config,
     state: SharedState,
     stop_rx: oneshot::Receiver<()>,
+    vol_rx: watch::Receiver<f32>,
 ) {
     info!("player[{}] slot={} starting: {}", id, slot, url);
 
@@ -146,8 +154,15 @@ async fn run_player(
             .await;
 
         match decode_result {
-            Ok(Ok((pcm_samples, _))) => {
+            Ok(Ok((mut pcm_samples, _))) => {
                 if !pcm_samples.is_empty() {
+                    // Apply software volume scaling
+                    let vol = *vol_rx.borrow();
+                    if vol < 0.999 {
+                        for s in &mut pcm_samples {
+                            *s = (*s as f32 * vol) as i32;
+                        }
+                    }
                     if let Err(e) = alsa.write_frames(&pcm_samples) {
                         error!("player[{}] ALSA write error: {}", id_loop, e);
                         set_player_error(&state, id_loop, e.to_string()).await;

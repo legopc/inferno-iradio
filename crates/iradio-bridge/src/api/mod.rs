@@ -11,7 +11,7 @@ use axum::{
     http::StatusCode,
     middleware,
     response::{IntoResponse, Json, Response},
-    routing::{delete, get, post},
+    routing::{delete, get, patch, post},
     Router,
 };
 use serde_json::json;
@@ -82,6 +82,7 @@ pub fn build_router(state: SharedState, config: Config) -> Router {
         .route("/players", post(players::create_player))
         .route("/players/:id", get(players::get_player))
         .route("/players/:id", delete(players::delete_player))
+        .route("/players/:id/volume", patch(players::set_volume))
         .route("/stations/search", get(stations::search))
         .route("/stations/top", get(stations::top))
         .route("/stations/tags", get(stations::tags))

@@ -1,4 +1,4 @@
-use crate::api::{ApiResult, ApiState};
+use crate::api::ApiState;
 use crate::player::spawn_player;
 use crate::state::PlayerInfo;
 use axum::{
@@ -6,7 +6,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -18,10 +18,15 @@ pub struct CreatePlayerRequest {
     pub slot: Option<usize>,
 }
 
-pub async fn list_players(State(ctx): State<ApiState>) -> ApiResult<Vec<PlayerInfo>> {
+#[derive(Deserialize)]
+pub struct SetVolumeRequest {
+    pub volume: f32,
+}
+
+pub async fn list_players(State(ctx): State<ApiState>) -> Json<Vec<PlayerInfo>> {
     let players = ctx.state.players.read().await;
     let list: Vec<PlayerInfo> = players.values().map(|(info, _)| info.clone()).collect();
-    Ok(Json(list))
+    Json(list)
 }
 
 pub async fn get_player(
@@ -51,9 +56,7 @@ pub async fn create_player(
             .into_response();
     }
 
-    // Determine slot
     let slot = if let Some(s) = body.slot {
-        // Validate requested slot
         if s == 0 || s > ctx.state.config.max_players {
             return (
                 StatusCode::BAD_REQUEST,
@@ -63,16 +66,19 @@ pub async fn create_player(
             )
                 .into_response();
         }
-        // Check if slot is already in use
-        let players = ctx.state.players.read().await;
-        if players.values().any(|(info, _)| info.slot == s) {
-            return (
-                StatusCode::CONFLICT,
-                Json(json!({ "error": format!("slot {} is already in use", s) })),
-            )
-                .into_response();
+        // Stop any existing player on this slot (overwrite)
+        let occupied_id = {
+            let players = ctx.state.players.read().await;
+            players.values()
+                .find(|(info, _)| info.slot == s)
+                .map(|(info, _)| info.id)
+        };
+        if let Some(old_id) = occupied_id {
+            let removed = ctx.state.players.write().await.remove(&old_id);
+            if let Some((_, mut handle)) = removed {
+                handle.stop().await;
+            }
         }
-        drop(players);
         s
     } else {
         match ctx.state.next_free_slot().await {
@@ -100,15 +106,34 @@ pub async fn create_player(
     (StatusCode::CREATED, Json(info)).into_response()
 }
 
+pub async fn set_volume(
+    State(ctx): State<ApiState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<SetVolumeRequest>,
+) -> impl IntoResponse {
+    let volume = body.volume.clamp(0.0, 1.0);
+    let mut players = ctx.state.players.write().await;
+    match players.get_mut(&id) {
+        Some((info, handle)) => {
+            info.volume = volume;
+            handle.set_volume(volume);
+            Json(json!({ "id": id, "volume": volume })).into_response()
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "player not found" })),
+        )
+            .into_response(),
+    }
+}
+
 pub async fn delete_player(
     State(ctx): State<ApiState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let mut players = ctx.state.players.write().await;
-    match players.remove(&id) {
+    let removed = ctx.state.players.write().await.remove(&id);
+    match removed {
         Some((_, mut handle)) => {
-            // Stop the player task (async, brief)
-            drop(players); // release lock before await
             handle.stop().await;
             StatusCode::NO_CONTENT.into_response()
         }
