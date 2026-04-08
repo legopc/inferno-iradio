@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::warn;
 use uuid::Uuid;
 
 /// A station from RadioBrowser or a custom URL
@@ -79,6 +80,8 @@ pub struct AppState {
     pub config: Config,
     pub players: RwLock<HashMap<Uuid, (PlayerInfo, PlayerHandle)>>,
     pub favourites: RwLock<Vec<Station>>,
+    /// Per-slot volumes (index 0 = slot 1), persisted across restarts.
+    pub slot_volumes: RwLock<Vec<f32>>,
     /// One sender per slot (index 0 = slot 1). Used by create_player to hand
     /// the audio path to a new player without opening a new ALSA device.
     pub slot_senders: Vec<SlotSender>,
@@ -87,10 +90,12 @@ pub struct AppState {
 impl AppState {
     pub fn new(config: Config, slot_senders: Vec<SlotSender>) -> Self {
         let favourites = Self::load_favourites(&config.favourites_path);
+        let slot_volumes = Self::load_volumes(&config.volumes_path, config.max_players);
         Self {
             config,
             players: RwLock::new(HashMap::new()),
             favourites: RwLock::new(favourites),
+            slot_volumes: RwLock::new(slot_volumes),
             slot_senders,
         }
     }
@@ -102,6 +107,17 @@ impl AppState {
         }
     }
 
+    fn load_volumes(path: &PathBuf, max_slots: usize) -> Vec<f32> {
+        let saved: Vec<f32> = std::fs::read_to_string(path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+        // Ensure length matches max_slots, filling missing slots with 0.7
+        let mut v = saved;
+        v.resize(max_slots, 0.7);
+        v
+    }
+
     pub async fn save_favourites(&self) -> anyhow::Result<()> {
         let favs = self.favourites.read().await;
         let json = serde_json::to_string_pretty(&*favs)?;
@@ -110,6 +126,38 @@ impl AppState {
         }
         std::fs::write(&self.config.favourites_path, json)?;
         Ok(())
+    }
+
+    /// Save per-slot volumes to disk.
+    pub async fn save_volumes(&self) {
+        let vols = self.slot_volumes.read().await;
+        let json = match serde_json::to_string(&*vols) {
+            Ok(j) => j,
+            Err(e) => { warn!("save_volumes: serialize error: {}", e); return; }
+        };
+        if let Some(parent) = self.config.volumes_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Err(e) = std::fs::write(&self.config.volumes_path, json) {
+            warn!("save_volumes: write error: {}", e);
+        }
+    }
+
+    /// Get stored volume for a slot (1-based). Returns 0.7 if not set.
+    pub async fn get_slot_volume(&self, slot: usize) -> f32 {
+        let vols = self.slot_volumes.read().await;
+        vols.get(slot - 1).copied().unwrap_or(0.7)
+    }
+
+    /// Set and persist volume for a slot (1-based).
+    pub async fn set_slot_volume(&self, slot: usize, volume: f32) {
+        {
+            let mut vols = self.slot_volumes.write().await;
+            if let Some(v) = vols.get_mut(slot - 1) {
+                *v = volume.clamp(0.0, 1.0);
+            }
+        }
+        self.save_volumes().await;
     }
 
     /// Returns the next free player slot (1-based), or None if all full

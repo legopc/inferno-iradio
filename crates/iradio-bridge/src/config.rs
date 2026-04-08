@@ -7,6 +7,8 @@ pub struct Config {
     pub port: u16,
     pub max_players: usize,
     pub favourites_path: PathBuf,
+    /// Path to persist per-slot default volumes
+    pub volumes_path: PathBuf,
     pub auth: AuthConfig,
     pub alsa: AlsaConfig,
     pub radiobrowser: RadioBrowserConfig,
@@ -41,10 +43,14 @@ pub struct RadioBrowserConfig {
 
 impl Default for Config {
     fn default() -> Self {
+        let base = std::env::var("HOME")
+            .map(|h| std::path::PathBuf::from(h).join(".local/share/iradio"))
+            .unwrap_or_else(|_| std::path::PathBuf::from("/var/home/core/.local/share/iradio"));
         Self {
             port: 8765,
             max_players: 4,
-            favourites_path: PathBuf::from("/var/lib/iradio/favourites.json"),
+            favourites_path: base.join("favourites.json"),
+            volumes_path: base.join("volumes.json"),
             auth: AuthConfig::default(),
             alsa: AlsaConfig::default(),
             radiobrowser: RadioBrowserConfig::default(),

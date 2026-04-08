@@ -108,13 +108,19 @@ pub async fn create_player(
         }
     };
 
+    let initial_volume = if body.volume != default_create_volume() {
+        body.volume.clamp(0.0, 1.0)
+    } else {
+        ctx.state.get_slot_volume(slot).await
+    };
+
     let (id, info, handle) = spawn_player(
         slot,
         body.name,
         body.url,
         ctx.state.clone(),
         &ctx.state.config,
-        body.volume.clamp(0.0, 1.0),
+        initial_volume,
         slot_tx,
     );
 
@@ -129,19 +135,26 @@ pub async fn set_volume(
     Json(body): Json<SetVolumeRequest>,
 ) -> impl IntoResponse {
     let volume = body.volume.clamp(0.0, 1.0);
-    let mut players = ctx.state.players.write().await;
-    match players.get_mut(&id) {
-        Some((info, handle)) => {
-            info.volume = volume;
-            handle.set_volume(volume);
-            Json(json!({ "id": id, "volume": volume })).into_response()
+    let slot = {
+        let mut players = ctx.state.players.write().await;
+        match players.get_mut(&id) {
+            Some((info, handle)) => {
+                info.volume = volume;
+                handle.set_volume(volume);
+                info.slot
+            }
+            None => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({ "error": "player not found" })),
+                )
+                    .into_response();
+            }
         }
-        None => (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "error": "player not found" })),
-        )
-            .into_response(),
-    }
+    };
+    // Persist the volume so next play on this slot starts at the same level
+    ctx.state.set_slot_volume(slot, volume).await;
+    Json(json!({ "id": id, "volume": volume })).into_response()
 }
 
 pub async fn delete_player(

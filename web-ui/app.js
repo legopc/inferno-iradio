@@ -18,7 +18,13 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(refreshPlayers, 5000);
 });
 
-// ── Tab switching ──────────────────────────────────────────────────────────
+// ── Volume helpers (quadratic perceptual curve) ────────────────────────────
+// Slider 0–100 → actual volume (0.0–1.0): vol = (s/100)²
+// This gives a more natural "loud at high end, fine control at low end" feel.
+function sliderToVol(s) { return Math.pow(s / 100, 2); }
+function volToSlider(v) { return Math.round(Math.sqrt(Math.max(0, v)) * 100); }
+
+
 function switchTab(tab) {
   document.querySelectorAll('.tab-section').forEach(s => s.classList.add('hidden'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('tab-btn-active'));
@@ -44,6 +50,19 @@ async function checkApi() {
   } catch {
     document.getElementById('pillApiDot').className = 'pill-dot error';
   }
+  // Load persisted default volume
+  try {
+    const r = await fetch(API + '/volume');
+    if (r.ok) {
+      const data = await r.json();
+      defaultVolume = typeof data.volume === 'number' ? data.volume : 0.7;
+      const s = volToSlider(defaultVolume);
+      const sl = document.getElementById('globalVolSlider');
+      const lb = document.getElementById('globalVolLabel');
+      if (sl) sl.value = s;
+      if (lb) lb.textContent = s + '%';
+    }
+  } catch {}
 }
 
 // ── Players ────────────────────────────────────────────────────────────────
@@ -73,8 +92,8 @@ function renderPlayerCard(p) {
   const stateClass = p.state === 'playing' ? 'active' : p.state === 'error' ? 'error' : 'inactive';
   const dotClass = p.state === 'playing' ? 'pulse-active' : p.state === 'error' ? 'pulse-failed' : '';
   const stateLabel = p.state.charAt(0).toUpperCase() + p.state.slice(1);
-  const vol = typeof p.volume === 'number' ? p.volume : 1.0;
-  const volPct = Math.round(vol * 100);
+  const vol = typeof p.volume === 'number' ? p.volume : 0.7;
+  const sliderVal = volToSlider(vol);
   return `
     <div class="svc-card ${stateClass}" style="margin-bottom:8px">
       <div class="svc-header">
@@ -94,10 +113,10 @@ function renderPlayerCard(p) {
       </div>
       <div class="volume-row">
         <span class="volume-label">🔊 Volume</span>
-        <input type="range" class="volume-slider" min="0" max="100" value="${volPct}"
+        <input type="range" class="volume-slider" min="0" max="100" value="${sliderVal}"
           oninput="onVolumeChange(this,'${p.id}')"
-          onchange="setVolume('${p.id}', this.value/100)">
-        <span class="volume-value" id="vol-${p.id}">${volPct}%</span>
+          onchange="setVolume('${p.id}', sliderToVol(this.value))">
+        <span class="volume-value" id="vol-${p.id}">${sliderVal}%</span>
       </div>
     </div>`;
 }
@@ -112,10 +131,22 @@ async function stopPlayer(id) {
   }
 }
 
+let globalVolDebounce = null;
 function onGlobalVolumeChange(slider) {
-  defaultVolume = slider.value / 100;
+  defaultVolume = sliderToVol(slider.value);
   const el = document.getElementById('globalVolLabel');
   if (el) el.textContent = slider.value + '%';
+  // Persist to backend (debounced)
+  clearTimeout(globalVolDebounce);
+  globalVolDebounce = setTimeout(async () => {
+    try {
+      await fetch(API + '/volume', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ volume: defaultVolume }),
+      });
+    } catch {}
+  }, 300);
 }
 
 function onVolumeChange(slider, playerId) {

@@ -78,6 +78,7 @@ pub fn build_router(state: SharedState, config: Config) -> Router {
     let api = Router::new()
         .route("/health", get(system::health))
         .route("/config", get(system::get_config))
+        .route("/volume", get(system::get_volume).put(system::set_default_volume))
         .route("/players", get(players::list_players))
         .route("/players", post(players::create_player))
         .route("/players/:id", get(players::get_player))
