@@ -1,4 +1,5 @@
 use crate::api::ApiState;
+use crate::events::WsEvent;
 use crate::player::spawn_player;
 use crate::state::PlayerInfo;
 use axum::{
@@ -18,6 +19,8 @@ pub struct CreatePlayerRequest {
     /// Initial volume 0.0–1.0. Defaults to 0.8 to protect ears.
     #[serde(default = "default_create_volume")]
     pub volume: f32,
+    /// Per-slot gain in dB (-6.0 to 6.0). Defaults to stored slot gain.
+    pub gain_db: Option<f32>,
 }
 
 fn default_create_volume() -> f32 { 0.8 }
@@ -25,6 +28,11 @@ fn default_create_volume() -> f32 { 0.8 }
 #[derive(Deserialize)]
 pub struct SetVolumeRequest {
     pub volume: f32,
+}
+
+#[derive(Deserialize)]
+pub struct GainBody {
+    pub gain_db: f32,
 }
 
 pub async fn list_players(State(ctx): State<ApiState>) -> Json<Vec<PlayerInfo>> {
@@ -114,7 +122,12 @@ pub async fn create_player(
         ctx.state.get_slot_volume(slot).await
     };
 
-    let (id, info, handle) = spawn_player(
+    let initial_gain = match body.gain_db {
+        Some(g) => g.clamp(-6.0, 6.0),
+        None => ctx.state.get_slot_gain(slot).await,
+    };
+
+    let (id, mut info, mut handle) = spawn_player(
         slot,
         body.name,
         body.url,
@@ -124,7 +137,15 @@ pub async fn create_player(
         slot_tx,
     );
 
+    // Apply initial gain
+    info.gain_db = initial_gain;
+    handle.set_gain(initial_gain);
+
+    let player_json = serde_json::to_value(&info).unwrap_or_default();
     ctx.state.players.write().await.insert(id, (info.clone(), handle));
+
+    // Broadcast new player to WebSocket subscribers
+    ctx.state.events.send(WsEvent::PlayerUpdate { player: player_json });
 
     (StatusCode::CREATED, Json(info)).into_response()
 }
@@ -157,6 +178,30 @@ pub async fn set_volume(
     Json(json!({ "id": id, "volume": volume })).into_response()
 }
 
+pub async fn patch_player_gain(
+    State(ctx): State<ApiState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<GainBody>,
+) -> impl IntoResponse {
+    let gain_db = body.gain_db.clamp(-6.0, 6.0);
+    let slot = {
+        let mut players = ctx.state.players.write().await;
+        if let Some((info, handle)) = players.get_mut(&id) {
+            info.gain_db = gain_db;
+            handle.set_gain(gain_db);
+            info.slot
+        } else {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "not found" })),
+            )
+                .into_response();
+        }
+    };
+    ctx.state.set_slot_gain(slot, gain_db).await;
+    (StatusCode::OK, Json(json!({ "gain_db": gain_db }))).into_response()
+}
+
 pub async fn delete_player(
     State(ctx): State<ApiState>,
     Path(id): Path<Uuid>,
@@ -165,6 +210,7 @@ pub async fn delete_player(
     match removed {
         Some((_, mut handle)) => {
             handle.stop().await;
+            ctx.state.events.send(WsEvent::PlayerStopped { id: id.to_string() });
             StatusCode::NO_CONTENT.into_response()
         }
         None => (
