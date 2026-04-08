@@ -12,6 +12,7 @@ mod config;
 mod decode;
 mod player;
 mod radiobrowser;
+mod slot_keeper;
 mod state;
 mod stream;
 
@@ -62,7 +63,10 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let app_state = Arc::new(state::AppState::new(cfg.clone()));
+    let app_state = Arc::new(state::AppState::new(
+        cfg.clone(),
+        slot_keeper::start_slot_keepers(cfg.max_players, &cfg),
+    ));
     let router = api::build_router(app_state.clone(), cfg.clone());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));

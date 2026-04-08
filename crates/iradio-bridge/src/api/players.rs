@@ -97,6 +97,17 @@ pub async fn create_player(
         }
     };
 
+    let slot_tx = match ctx.state.slot_senders.get(slot - 1) {
+        Some(s) => s.clone(),
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "slot sender not configured" })),
+            )
+                .into_response();
+        }
+    };
+
     let (id, info, handle) = spawn_player(
         slot,
         body.name,
@@ -104,6 +115,7 @@ pub async fn create_player(
         ctx.state.clone(),
         &ctx.state.config,
         body.volume.clamp(0.0, 1.0),
+        slot_tx,
     );
 
     ctx.state.players.write().await.insert(id, (info.clone(), handle));

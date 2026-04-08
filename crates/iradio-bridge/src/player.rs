@@ -1,8 +1,10 @@
-use crate::alsa::{device_name, InfernoAlsaDevice};
 use crate::config::Config;
+use crate::slot_keeper::SlotSender;
 use crate::state::{PlayerInfo, PlayerState, SharedState};
+use crate::stream::SharedBuffer;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio::sync::{oneshot, watch};
 use tracing::{error, info, warn};
@@ -31,6 +33,7 @@ impl PlayerHandle {
 }
 
 /// Spawn a player task for the given slot.
+/// `slot_tx` is the sender to the slot's keepalive/ALSA task.
 pub fn spawn_player(
     slot: usize,
     name: String,
@@ -38,6 +41,7 @@ pub fn spawn_player(
     state: SharedState,
     config: &Config,
     initial_volume: f32,
+    slot_tx: SlotSender,
 ) -> (Uuid, PlayerInfo, PlayerHandle) {
     let id = Uuid::new_v4();
     let mut info = PlayerInfo::new(id, slot, name.clone(), url.clone());
@@ -50,14 +54,7 @@ pub fn spawn_player(
     let id_clone = id;
 
     let task = tokio::spawn(run_player(
-        id_clone,
-        slot,
-        url,
-        name,
-        cfg,
-        state_clone,
-        stop_rx,
-        vol_rx,
+        id_clone, slot, url, name, cfg, state_clone, stop_rx, vol_rx, slot_tx,
     ));
 
     let handle = PlayerHandle {
@@ -73,27 +70,16 @@ async fn run_player(
     id: Uuid,
     slot: usize,
     url: String,
-    name: String,
+    _name: String,
     cfg: Config,
     state: SharedState,
     stop_rx: oneshot::Receiver<()>,
     vol_rx: watch::Receiver<f32>,
+    slot_tx: SlotSender,
 ) {
     info!("player[{}] slot={} starting: {}", id, slot, url);
 
-    let dev_str = device_name(slot);
-
-    let alsa_result = InfernoAlsaDevice::open(&dev_str, cfg.alsa.sample_rate, cfg.alsa.buffer_frames);
-    let alsa = match alsa_result {
-        Ok(d) => d,
-        Err(e) => {
-            error!("player[{}] ALSA open failed: {}", id, e);
-            set_player_error(&state, id, e.to_string()).await;
-            return;
-        }
-    };
-
-    let buffer: Arc<Mutex<VecDeque<u8>>> = Arc::new(Mutex::new(VecDeque::new()));
+    let buffer: SharedBuffer = Arc::new(Mutex::new(VecDeque::new()));
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(cfg.radiobrowser.request_timeout_secs))
         .build()
@@ -107,95 +93,74 @@ async fn run_player(
         fetch_stop_rx,
     );
 
-    // Wait for initial buffer fill (up to 5s), feeding silence to keep ALSA pipeline alive
+    // Wait for initial buffer fill (up to 5 s).
+    // The slot keeper keeps ALSA fed with silence during this time.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {
-        {
-            let buf = buffer.lock().unwrap();
-            if buf.len() >= 8 * 1024 {
-                break;
-            }
+        if buffer.lock().unwrap().len() >= 8 * 1024 {
+            break;
         }
         if tokio::time::Instant::now() > deadline {
             warn!("player[{}] buffer fill timeout", id);
             break;
         }
-        alsa.write_silence();
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 
+    // Start the streaming decoder (runs in a blocking thread, maintains symphonia state
+    // across the full stream — no more chunk-boundary artifacts).
+    let (decode_handle, mut pcm_rx) = crate::decode::start_streaming_decode(
+        buffer.clone(),
+        cfg.alsa.sample_rate,
+        cfg.alsa.buffer_frames as usize,
+    );
+
     set_player_state(&state, id, PlayerState::Playing).await;
-    info!("player[{}] playing on ALSA device {}", id, dev_str);
-
-    // Prime the ALSA pipeline with silence to prevent Dante echo on connect
-    alsa.write_silence();
-
-    // Decode + write loop
-    let buffer_clone = buffer.clone();
-    let sample_rate = cfg.alsa.sample_rate;
-    let id_loop = id;
+    info!("player[{}] playing → slot {}", id, slot);
 
     let mut stop_rx = stop_rx;
 
     loop {
-        // Read a chunk from buffer
-        let chunk = crate::stream::read_bytes(&buffer_clone, 64 * 1024);
-        if chunk.is_empty() {
-            // Keep ALSA fed with silence to prevent xrun while stream is stalled
-            alsa.write_silence();
+        tokio::select! {
+            biased;
 
-            // Check for stop signal
-            match stop_rx.try_recv() {
-                Ok(_) | Err(oneshot::error::TryRecvError::Closed) => break,
-                Err(oneshot::error::TryRecvError::Empty) => {}
-            }
-            continue;
-        }
+            // Stop signal from API
+            _ = &mut stop_rx => break,
 
-        // Decode in blocking thread
-        let cursor = std::io::Cursor::new(chunk);
-        let decode_result =
-            tokio::task::spawn_blocking(move || {
-                crate::decode::decode_to_pcm(Box::new(cursor), sample_rate)
-            })
-            .await;
-
-        match decode_result {
-            Ok(Ok((mut pcm_samples, _))) => {
-                if !pcm_samples.is_empty() {
-                    // Apply software volume scaling
-                    let vol = *vol_rx.borrow();
-                    if vol < 0.999 {
-                        for s in &mut pcm_samples {
-                            *s = (*s as f32 * vol) as i32;
+            // Decoded PCM ready
+            maybe_samples = pcm_rx.recv() => {
+                match maybe_samples {
+                    Some(mut samples) => {
+                        // Apply software volume
+                        let vol = *vol_rx.borrow();
+                        if vol < 0.999 {
+                            for s in &mut samples {
+                                *s = (*s as f32 * vol) as i32;
+                            }
+                        }
+                        // Forward to slot keeper → ALSA
+                        if slot_tx.tx.send(samples).await.is_err() {
+                            error!("player[{}] slot sender gone", id);
+                            break;
                         }
                     }
-                    if let Err(e) = alsa.write_frames(&pcm_samples) {
-                        error!("player[{}] ALSA write error: {}", id_loop, e);
-                        set_player_error(&state, id_loop, e.to_string()).await;
+                    None => {
+                        // Decoder stopped (stream ended or error)
+                        warn!("player[{}] decoder channel closed", id);
                         break;
                     }
                 }
             }
-            Ok(Err(e)) => {
-                warn!("player[{}] decode error: {}", id_loop, e);
-                // Non-fatal — continue with next chunk
-            }
-            Err(e) => {
-                error!("player[{}] decode task panicked: {}", id_loop, e);
-                break;
-            }
-        }
-
-        // Check stop signal
-        match stop_rx.try_recv() {
-            Ok(_) | Err(oneshot::error::TryRecvError::Closed) => break,
-            Err(oneshot::error::TryRecvError::Empty) => {}
         }
     }
 
+    // Cleanly stop the decoder thread and HTTP fetch
+    decode_handle.stop.store(true, Ordering::Relaxed);
     let _ = fetch_stop_tx.send(());
-    alsa.drain();
+    // Give the decode thread a moment to unblock from blocking_send / Read::read
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    set_player_state(&state, id, PlayerState::Stopped).await;
     info!("player[{}] stopped", id);
 }
 
@@ -206,10 +171,3 @@ async fn set_player_state(state: &SharedState, id: Uuid, new_state: PlayerState)
     }
 }
 
-async fn set_player_error(state: &SharedState, id: Uuid, error: String) {
-    let mut players = state.players.write().await;
-    if let Some((info, _)) = players.get_mut(&id) {
-        info.state = PlayerState::Error;
-        info.error = Some(error);
-    }
-}

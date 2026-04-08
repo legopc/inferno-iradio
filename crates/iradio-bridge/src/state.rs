@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::player::PlayerHandle;
+use crate::slot_keeper::SlotSender;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -78,15 +79,19 @@ pub struct AppState {
     pub config: Config,
     pub players: RwLock<HashMap<Uuid, (PlayerInfo, PlayerHandle)>>,
     pub favourites: RwLock<Vec<Station>>,
+    /// One sender per slot (index 0 = slot 1). Used by create_player to hand
+    /// the audio path to a new player without opening a new ALSA device.
+    pub slot_senders: Vec<SlotSender>,
 }
 
 impl AppState {
-    pub fn new(config: Config) -> Self {
+    pub fn new(config: Config, slot_senders: Vec<SlotSender>) -> Self {
         let favourites = Self::load_favourites(&config.favourites_path);
         Self {
             config,
             players: RwLock::new(HashMap::new()),
             favourites: RwLock::new(favourites),
+            slot_senders,
         }
     }
 
