@@ -44,6 +44,8 @@ export interface VolumeResponse {
 }
 
 export type WsEvent =
+  | { type: 'snapshot'; players: PlayerInfo[] }
+  | { type: 'vu_batch'; levels: Record<string, { l: number; r: number }> }
   | { type: 'vu'; slot: number; l: number; r: number }
   | { type: 'icy_meta'; slot: number; title: string }
   | { type: 'player_update'; player: PlayerInfo }

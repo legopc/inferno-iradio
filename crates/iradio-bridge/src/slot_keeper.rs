@@ -7,10 +7,12 @@
 
 use std::time::Duration;
 use tokio::sync::mpsc;
+use tokio::sync::broadcast;
 use tracing::{info, warn};
 
 use crate::alsa::{device_name, InfernoAlsaDevice};
 use crate::config::Config;
+use crate::events::WsEvent;
 
 /// Clone-able handle the player uses to push PCM into the slot's ALSA device.
 #[derive(Clone)]
@@ -20,18 +22,28 @@ pub struct SlotSender {
 
 /// Start one keepalive task per slot (slots are 1-based).
 /// Returns senders indexed 0 … max_slots-1 (index 0 = slot 1).
-pub fn start_slot_keepers(max_slots: usize, cfg: &Config) -> Vec<SlotSender> {
+pub fn start_slot_keepers(
+    max_slots: usize,
+    cfg: &Config,
+    event_tx: broadcast::Sender<WsEvent>,
+) -> Vec<SlotSender> {
     (1..=max_slots)
         .map(|slot| {
             let (tx, rx) = mpsc::channel::<Vec<i32>>(8);
             let cfg2 = cfg.clone();
-            tokio::spawn(run_keeper(slot, rx, cfg2));
+            let event_tx_clone = event_tx.clone();
+            tokio::spawn(run_keeper(slot, rx, cfg2, event_tx_clone));
             SlotSender { tx }
         })
         .collect()
 }
 
-async fn run_keeper(slot: usize, mut rx: mpsc::Receiver<Vec<i32>>, cfg: Config) {
+async fn run_keeper(
+    slot: usize,
+    mut rx: mpsc::Receiver<Vec<i32>>,
+    cfg: Config,
+    event_tx: broadcast::Sender<WsEvent>,
+) {
     let dev_str = device_name(slot);
 
     // Retry until the Dante plugin is ready (can take a few seconds after service start).
@@ -49,12 +61,16 @@ async fn run_keeper(slot: usize, mut rx: mpsc::Receiver<Vec<i32>>, cfg: Config) 
     loop {
         match rx.try_recv() {
             Ok(samples) => {
-                // Player audio — write it directly.
+                // Player audio — measure RMS and write it directly.
+                let (l, r) = crate::audio::rms_db(&samples);
                 let _ = alsa.write_frames(&samples);
+                let _ = event_tx.send(WsEvent::Vu { slot, l, r });
             }
             Err(mpsc::error::TryRecvError::Empty) => {
                 // Nothing queued — feed silence to keep Dante TX channel alive.
                 alsa.write_silence();
+                // Send silence-level VU so UI meters fall to floor
+                let _ = event_tx.send(WsEvent::Vu { slot, l: -96.0, r: -96.0 });
                 // Yield so other tasks get a turn (write_silence may have blocked
                 // ~85 ms waiting for ALSA buffer space, so this is low-overhead).
                 tokio::task::yield_now().await;

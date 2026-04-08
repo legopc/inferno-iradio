@@ -7,9 +7,11 @@ use tracing::info;
 mod api;
 mod alsa;
 mod alsa_setup;
+mod audio;
 mod auth;
 mod config;
 mod decode;
+mod events;
 mod player;
 mod radiobrowser;
 mod slot_keeper;
@@ -63,10 +65,10 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let app_state = Arc::new(state::AppState::new(
-        cfg.clone(),
-        slot_keeper::start_slot_keepers(cfg.max_players, &cfg),
-    ));
+    let event_hub = crate::events::EventHub::new();
+    let event_tx = event_hub.sender();
+    let slot_senders = slot_keeper::start_slot_keepers(cfg.max_players, &cfg, event_tx);
+    let app_state = Arc::new(state::AppState::new(cfg.clone(), slot_senders, event_hub));
     let router = api::build_router(app_state.clone(), cfg.clone());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));

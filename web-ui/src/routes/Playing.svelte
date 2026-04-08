@@ -1,188 +1,238 @@
 <script lang="ts">
-  import { players, maxSlots } from '../lib/stores';
+  import type { Station } from '../lib/types';
+  import { players, maxSlots, apiOnline } from '../lib/stores';
+  import { api } from '../lib/api';
+  import { toast } from '../components/Toast.svelte';
   import ChannelStrip from '../components/ChannelStrip.svelte';
+  import StationRow from '../components/StationRow.svelte';
   import SlotPicker from '../components/SlotPicker.svelte';
   import { onMount } from 'svelte';
 
-  let showSlotPicker = false;
-  let selectedSlot: number | null = null;
+  let favs: Station[] = [];
+  let presetsOpen = true;
+  let pendingStation: Station | null = null;
+  let slotPickerOpen = false;
 
-  $: playersArray = $players;
-
-  function openAddStationDialog() {
-    showSlotPicker = true;
+  async function loadFavs() {
+    try { favs = await api.getFavourites() as Station[]; } catch {}
   }
 
-  function handleSlotSelected(e: CustomEvent<number>) {
-    selectedSlot = e.detail;
-    showSlotPicker = false;
-    // Navigate to Search tab with preselected slot
-    // This would typically trigger a parent component to show Search with preselectedSlot
-    window.dispatchEvent(new CustomEvent('navigate-to-search', { detail: { slot: selectedSlot } }));
+  onMount(() => { if ($apiOnline) loadFavs(); });
+  $: if ($apiOnline && favs.length === 0) loadFavs();
+
+  function handlePlay(station: Station) {
+    pendingStation = station;
+    slotPickerOpen = true;
   }
 
-  function closeSlotPicker() {
-    showSlotPicker = false;
+  async function handleSlotSelect(slot: number) {
+    if (!pendingStation) return;
+    const s = pendingStation;
+    slotPickerOpen = false;
+    pendingStation = null;
+    try {
+      // Stop any existing player in this slot first
+      const existing = $players.find(p => p.slot === slot);
+      if (existing) {
+        await api.deletePlayer(existing.id).catch(() => {});
+        players.update(list => list.filter(p => p.id !== existing.id));
+      }
+      const newPlayer = await api.createPlayer(s.url, s.name, slot);
+      players.update(list => {
+        const idx = list.findIndex(p => p.id === newPlayer.id);
+        if (idx >= 0) { const copy = [...list]; copy[idx] = newPlayer; return copy; }
+        return [...list, newPlayer];
+      });
+      toast('success', `Playing: ${s.name}`);
+    } catch (err: unknown) {
+      toast('error', err instanceof Error ? err.message : 'Failed to start player');
+    }
   }
+
+  async function removeFav(station: Station) {
+    try {
+      await api.removeFavourite(station.id);
+      favs = favs.filter(f => f.id !== station.id);
+      toast('info', `Removed: ${station.name}`);
+    } catch (err: unknown) {
+      toast('error', err instanceof Error ? err.message : 'Failed to remove');
+    }
+  }
+
+  function handleSlotClose() { slotPickerOpen = false; pendingStation = null; }
 </script>
 
-<div class="container">
-  {#if playersArray.length === 0}
-    <div class="empty-state">
-      <div class="empty-message">
-        <span class="boot-cursor">▮</span> NO STREAMS PLAYING — GO TO SEARCH TO ADD ONE
-      </div>
-      <button class="btn-primary" on:click={openAddStationDialog}>
-        Add Station
-      </button>
-    </div>
-  {:else}
-    <div class="header">
-      <h2>Now Playing</h2>
-      <button class="btn-secondary" on:click={openAddStationDialog}>
-        + Add Station
-      </button>
-    </div>
-    <div class="channel-grid">
-      {#each playersArray as player (player.id)}
+<div class="playing-view">
+  <div class="channel-grid">
+    {#each Array($maxSlots) as _, i}
+      {@const slot = i + 1}
+      {@const player = $players.find(p => p.slot === slot) ?? null}
+      {#if player}
         <ChannelStrip {player} />
-      {/each}
+      {:else}
+        <div class="empty-slot">
+          <span class="empty-slot-num">S{slot}</span>
+          <span class="empty-slot-label">EMPTY</span>
+        </div>
+      {/if}
+    {/each}
+  </div>
+
+  {#if $players.length === 0}
+    <div class="boot-hint">
+      <span class="boot-cursor">▮</span>
+      SCAN STATIONS TO TUNE IN
     </div>
   {/if}
 
-  {#if showSlotPicker}
-    <div class="modal-overlay" on:click={closeSlotPicker}>
-      <div class="modal-content" on:click|stopPropagation>
-        <h3>Select Slot</h3>
-        <SlotPicker
-          on:slot-selected={handleSlotSelected}
-          max={$maxSlots}
-          availableSlots={playersArray.map(p => p.slot)}
-        />
-        <button class="btn-secondary" on:click={closeSlotPicker}>Cancel</button>
+  <div class="slot-info">
+    {$players.length} / {$maxSlots} SLOTS ACTIVE
+  </div>
+
+  <!-- Presets panel -->
+  <div class="presets-panel">
+    <button class="presets-header" on:click={() => presetsOpen = !presetsOpen}>
+      <span class="presets-title">★ PRESETS</span>
+      <span class="presets-count">{favs.length}</span>
+      <span class="presets-chevron">{presetsOpen ? '▲' : '▼'}</span>
+    </button>
+
+    {#if presetsOpen}
+      <div class="presets-body">
+        {#if favs.length === 0}
+          <div class="presets-empty">No presets saved — star stations in the Search tab</div>
+        {:else}
+          {#each favs as station (station.id)}
+            <div class="preset-item">
+              <StationRow {station} onPlay={handlePlay} />
+              <button class="preset-remove" on:click={() => removeFav(station)} title="Remove preset">★</button>
+            </div>
+          {/each}
+        {/if}
       </div>
-    </div>
-  {/if}
+    {/if}
+  </div>
 </div>
 
+<SlotPicker
+  open={slotPickerOpen}
+  maxSlots={$maxSlots}
+  onSelect={handleSlotSelect}
+  onClose={handleSlotClose}
+/>
+
 <style>
-  .container {
+  .playing-view {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    padding: 16px;
+    height: 100%;
   }
-
-  .empty-state {
+  .channel-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--strip-width), 1fr));
+    gap: 10px;
+    align-items: flex-start;
+  }
+  @media (max-width: 600px) {
+    .channel-grid { grid-template-columns: 1fr; }
+  }
+  .boot-hint {
+    color: var(--text-dim);
+    padding: 8px 16px;
+    text-align: center;
+    letter-spacing: 0.1em;
+    font-size: 11px;
+  }
+  .boot-cursor {
+    color: var(--accent);
+    animation: blink 1s step-end infinite;
+    margin-right: 8px;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .empty-slot {
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 24px;
-    padding: 64px 32px;
-    text-align: center;
+    gap: 4px;
+    min-height: 180px;
+    opacity: 0.35;
+  }
+  .empty-slot-num {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-muted);
+  }
+  .empty-slot-label {
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    color: var(--text-muted);
+  }
+  .slot-info {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    text-align: right;
   }
 
-  .empty-message {
-    color: var(--text-dim);
-    font-size: 1.1em;
+  /* Presets panel */
+  .presets-panel {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-top: 4px;
   }
-
-  .boot-cursor {
-    color: var(--accent);
-    animation: blink 1s step-end infinite;
-  }
-
-  @keyframes blink {
-    50% {
-      opacity: 0;
-    }
-  }
-
-  .header {
+  .presets-header {
+    width: 100%;
+    background: var(--surface-elevated);
+    border: none;
+    padding: 10px 14px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
-  }
-
-  .header h2 {
-    margin: 0;
-    font-size: 1.3em;
+    gap: 8px;
+    cursor: pointer;
     color: var(--text);
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-align: left;
+    transition: background 0.1s;
   }
-
-  .channel-grid {
-    display: grid;
-    gap: 12px;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  }
-
-  .modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
-  }
-
-  .modal-content {
+  .presets-header:hover { background: var(--surface); }
+  .presets-title { color: var(--accent2); font-weight: 600; }
+  .presets-count {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 24px;
-    max-width: 400px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    padding: 0 6px;
+    font-size: 10px;
+    color: var(--text-muted);
   }
-
-  .modal-content h3 {
-    margin: 0 0 16px 0;
-    color: var(--text);
+  .presets-chevron { margin-left: auto; color: var(--text-muted); font-size: 10px; }
+  .presets-body { border-top: 1px solid var(--border); }
+  .presets-empty {
+    padding: 16px 14px;
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    text-align: center;
   }
-
-  .btn-primary,
-  .btn-secondary {
-    padding: 8px 16px;
+  .preset-item { display: flex; align-items: center; }
+  .preset-item :global(.station-row) { flex: 1; }
+  .preset-remove {
+    flex: none;
+    background: none;
     border: none;
-    border-radius: var(--radius);
+    color: var(--accent2);
+    font-size: 15px;
+    padding: 0 12px;
+    min-height: 44px;
+    min-width: 44px;
     cursor: pointer;
-    font-weight: 500;
-    transition: all 0.2s;
+    transition: color 0.1s;
   }
-
-  .btn-primary {
-    background: var(--accent);
-    color: var(--surface);
-  }
-
-  .btn-primary:hover {
-    opacity: 0.9;
-  }
-
-  .btn-secondary {
-    background: var(--surface2);
-    color: var(--text);
-    border: 1px solid var(--border);
-  }
-
-  .btn-secondary:hover {
-    background: var(--surface3);
-  }
-
-  @media (max-width: 768px) {
-    .channel-grid {
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    }
-  }
-
-  @media (max-width: 480px) {
-    .channel-grid {
-      grid-template-columns: 1fr;
-    }
-  }
+  .preset-remove:hover { color: var(--danger); }
 </style>

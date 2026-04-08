@@ -12,6 +12,10 @@ pub struct Config {
     pub auth: AuthConfig,
     pub alsa: AlsaConfig,
     pub radiobrowser: RadioBrowserConfig,
+    #[serde(default)]
+    pub audio: AudioConfig,
+    #[serde(default)]
+    pub websocket: WebSocketConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +45,19 @@ pub struct RadioBrowserConfig {
     pub request_timeout_secs: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioConfig {
+    pub default_gain_db: f32,
+    pub gains_path: PathBuf,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WebSocketConfig {
+    pub vu_fps: u32,
+}
+
 impl Default for Config {
     fn default() -> Self {
         let base = std::env::var("HOME")
@@ -54,6 +71,8 @@ impl Default for Config {
             auth: AuthConfig::default(),
             alsa: AlsaConfig::default(),
             radiobrowser: RadioBrowserConfig::default(),
+            audio: AudioConfig::default(),
+            websocket: WebSocketConfig::default(),
         }
     }
 }
@@ -88,6 +107,23 @@ impl Default for RadioBrowserConfig {
         Self {
             api_url: String::new(),
             request_timeout_secs: 10,
+        }
+    }
+}
+
+impl Default for AudioConfig {
+    fn default() -> Self {
+        Self {
+            default_gain_db: 0.0,
+            gains_path: PathBuf::from("/var/lib/iradio/gains.json"),
+        }
+    }
+}
+
+impl Default for WebSocketConfig {
+    fn default() -> Self {
+        Self {
+            vu_fps: 20,
         }
     }
 }

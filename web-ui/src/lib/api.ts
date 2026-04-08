@@ -10,6 +10,9 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || res.statusText);
   }
+  // 204 No Content or truly empty body — don't attempt JSON parse
+  const ct = res.headers.get('content-type') || '';
+  if (res.status === 204 || !ct.includes('json')) return undefined as T;
   return res.json();
 }
 

@@ -55,7 +55,7 @@ pub fn decode_to_pcm(
                 }
                 match decoder.decode(&packet) {
                     Ok(audio_buf) => {
-                        channels = audio_buf.spec().channels.count();
+                        channels = audio_buf.spec().channels.count().max(1);
                         convert_to_f32(&audio_buf, &mut samples_f32, channels);
                     }
                     Err(symphonia::core::errors::Error::DecodeError(e)) => {
@@ -358,7 +358,7 @@ fn decode_stream_thread(
                 }
                 match decoder.decode(&packet) {
                     Ok(audio_buf) => {
-                        let ch = audio_buf.spec().channels.count();
+                        let ch = audio_buf.spec().channels.count().max(1);
                         convert_to_f32(&audio_buf, &mut acc, ch);
 
                         // Flush complete periods

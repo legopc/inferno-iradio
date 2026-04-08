@@ -1,6 +1,6 @@
 [package]
 name = "iradio-bridge"
-version = "0.1.0"
+version = "2.0.0"
 edition = "2021"
 description = "Internet Radio → Dante AoIP bridge (Inferno appliance)"
 license = "MIT"
@@ -10,11 +10,13 @@ name = "iradio-bridge"
 path = "src/main.rs"
 
 [dependencies]
-# HTTP server
-axum = { version = "0.7", features = ["macros"] }
+# HTTP server + WebSocket
+axum = { version = "0.7", features = ["macros", "ws"] }
 tower-http = { version = "0.5", features = ["cors", "fs"] }
 # Async runtime
 tokio = { version = "1", features = ["full"] }
+# Broadcast channel (WS event hub)
+tokio-stream = "0.1"
 # HTTP client (stream fetch)
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
 # Audio decode

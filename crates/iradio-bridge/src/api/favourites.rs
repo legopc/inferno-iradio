@@ -16,23 +16,15 @@ pub async fn add_favourite(
     State(ctx): State<ApiState>,
     Json(station): Json<Station>,
 ) -> impl IntoResponse {
-    {
-        let mut favs = ctx.state.favourites.write().await;
-        // Deduplicate by id
-        if favs.iter().any(|s| s.id == station.id) {
-            return (
-                StatusCode::CONFLICT,
-                Json(json!({ "error": "already in favourites" })),
-            )
-                .into_response();
-        }
-        favs.push(station.clone());
+    let added = ctx.state.add_favourite(station).await;
+    if !added {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({ "error": "already in favourites" })),
+        )
+            .into_response();
     }
-    // Persist async (ignore errors on response path)
-    if let Err(e) = ctx.state.save_favourites().await {
-        tracing::warn!("failed to persist favourites: {e}");
-    }
-    (StatusCode::CREATED, Json(station)).into_response()
+    (StatusCode::CREATED, Json(json!({ "ok": true }))).into_response()
 }
 
 pub async fn remove_favourite(

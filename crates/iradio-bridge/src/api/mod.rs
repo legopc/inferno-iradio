@@ -2,6 +2,7 @@ pub mod favourites;
 pub mod players;
 pub mod stations;
 pub mod system;
+pub mod ws;
 
 use crate::auth::basic_auth_middleware;
 use crate::config::Config;
@@ -53,7 +54,7 @@ pub type ApiResult<T> = Result<Json<T>, AppError>;
 
 /// Embed web-ui/ assets at compile time
 #[derive(rust_embed::RustEmbed)]
-#[folder = "../../web-ui/"]
+#[folder = "../../web-ui/dist/"]
 struct WebAssets;
 
 pub fn build_router(state: SharedState, config: Config) -> Router {
@@ -84,6 +85,7 @@ pub fn build_router(state: SharedState, config: Config) -> Router {
         .route("/players/:id", get(players::get_player))
         .route("/players/:id", delete(players::delete_player))
         .route("/players/:id/volume", patch(players::set_volume))
+        .route("/players/:id/gain", patch(players::patch_player_gain))
         .route("/stations/search", get(stations::search))
         .route("/stations/top", get(stations::top))
         .route("/stations/tags", get(stations::tags))
@@ -93,6 +95,7 @@ pub fn build_router(state: SharedState, config: Config) -> Router {
         .route("/favourites", get(favourites::list_favourites))
         .route("/favourites", post(favourites::add_favourite))
         .route("/favourites/:id", delete(favourites::remove_favourite))
+        .route("/ws", get(ws::ws_handler))
         .with_state(ctx);
 
     let auth_enabled = config.auth.enabled;
@@ -104,7 +107,7 @@ pub fn build_router(state: SharedState, config: Config) -> Router {
     }));
 
     Router::new()
-        .nest("/api/v1", api_authed)
+        .nest("/api/v2", api_authed)
         .route("/", get(serve_index))
         .route("/*path", get(serve_static))
         .layer(CorsLayer::permissive())

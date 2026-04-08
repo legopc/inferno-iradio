@@ -3,12 +3,12 @@
   import { apiOnline, apiVersion, defaultVolume, activeCount } from '../lib/stores';
   import { api } from '../lib/api';
 
-  export let activeTab: 'playing' | 'search' | 'favourites' = 'playing';
+  export let activeTab: 'playing' | 'search' = 'playing';
 
   const dispatch = createEventDispatcher();
 
-  function sliderToVol(s: number) { return Math.pow(s / 100, 2); }
-  function volToSlider(v: number) { return Math.round(Math.sqrt(Math.max(0, v)) * 100); }
+  function sliderToVol(s: number) { return Math.pow(s / 100, 3); }
+  function volToSlider(v: number) { return Math.round(Math.cbrt(Math.max(0, v)) * 100); }
 
   let sliderVal = volToSlider(0.7);
   defaultVolume.subscribe(v => { sliderVal = volToSlider(v); });
@@ -38,7 +38,7 @@
       {$apiOnline ? `[ONLINE v${$apiVersion}]` : '[OFFLINE]'}
     </span>
     <div class="vol-wrap">
-      <span class="vol-label">VOL</span>
+      <span class="vol-label">DEFAULT VOL</span>
       <input type="range" class="vol-slider" min="0" max="100" value={sliderVal} on:input={onVolChange} />
       <span class="vol-val">{sliderVal}%</span>
     </div>
@@ -47,7 +47,6 @@
 <nav class="tab-rail">
   <button class="rail-btn" class:rail-active={activeTab === 'playing'} on:click={() => dispatch('tabChange', 'playing')}>NOW PLAYING</button>
   <button class="rail-btn" class:rail-active={activeTab === 'search'} on:click={() => dispatch('tabChange', 'search')}>SCAN STATIONS</button>
-  <button class="rail-btn" class:rail-active={activeTab === 'favourites'} on:click={() => dispatch('tabChange', 'favourites')}>PRESETS</button>
 </nav>
 
 <style>
@@ -66,8 +65,8 @@
     display: flex; gap: 2px; align-items: flex-end; height: 20px;
   }
   .brand-bars span {
-    width: 3px; background: var(--text-muted); border-radius: 1px;
-    animation: none;
+    width: 3px; background: var(--border); border-radius: 1px;
+    transition: background 0.3s;
   }
   .brand-bars span:nth-child(1) { height: 8px; }
   .brand-bars span:nth-child(2) { height: 14px; }
@@ -75,17 +74,23 @@
   .brand-bars span:nth-child(4) { height: 12px; }
   .brand-bars span:nth-child(5) { height: 6px; }
   .brand-bars.bars-active span { background: var(--accent); }
-  .brand-name { font-family: var(--font-cond); font-size: clamp(16px, 3vw, 22px); font-weight: 700; letter-spacing: 0.05em; color: var(--text); }
+  .brand-name {
+    font-family: var(--font-mono);
+    font-size: clamp(14px, 3vw, 20px);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--text);
+  }
   .brand-dot { color: var(--accent); }
-  .brand-sub { font-size: 10px; color: var(--text-dim); letter-spacing: 0.15em; display: block; }
+  .brand-sub { font-size: 10px; color: var(--text-muted); letter-spacing: 0.15em; display: block; }
   .header-status { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  .api-status { font-size: 11px; letter-spacing: 0.1em; color: var(--text-dim); }
-  .api-status.online { color: var(--vu-green); }
-  .api-status.offline { color: var(--danger); }
+  .api-status { font-size: 11px; letter-spacing: 0.1em; color: var(--text-muted); }
+  .api-status.online  { color: var(--vu-green); }
+  .api-status.offline { color: var(--error); }
   .vol-wrap { display: flex; align-items: center; gap: 8px; }
-  .vol-label { font-size: 11px; color: var(--text-dim); }
-  .vol-slider { width: clamp(80px, 12vw, 140px); accent-color: var(--accent); height: 44px; }
-  .vol-val { font-size: 11px; color: var(--text-dim); min-width: 30px; }
+  .vol-label { font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em; }
+  .vol-slider { width: clamp(80px, 12vw, 140px); accent-color: var(--accent); }
+  .vol-val { font-size: 11px; color: var(--text-muted); min-width: 30px; }
   .tab-rail {
     display: flex;
     border-bottom: 1px solid var(--border);
@@ -96,7 +101,9 @@
     padding: 12px 20px;
     background: none;
     border: none;
-    color: var(--text-dim);
+    border-radius: 0;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
     font-size: clamp(11px, 2vw, 13px);
     letter-spacing: 0.1em;
     border-bottom: 2px solid transparent;

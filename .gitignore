@@ -5,3 +5,5 @@ Cargo.lock
 config.toml
 *.iotupdate
 *.pcap
+web-ui/node_modules/
+web-ui/dist/

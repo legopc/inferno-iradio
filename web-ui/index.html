@@ -1,128 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>INFERNO·IRADIO</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-
-<!-- ── Toast container ────────────────────────────────────────────────────── -->
-<div id="toastContainer" class="toast-container"></div>
-
-<!-- ── Slot picker modal ──────────────────────────────────────────────────── -->
-<dialog id="slotModal" class="slot-modal">
-  <div class="slot-modal-header">
-    <div class="slot-modal-title">
-      <span class="slot-modal-label">SELECT CHANNEL</span>
-      <span class="slot-modal-station" id="slotModalName"></span>
-    </div>
-    <button class="modal-close-btn" onclick="document.getElementById('slotModal').close()">✕</button>
-  </div>
-  <div class="slot-modal-grid" id="slotGrid"></div>
-</dialog>
-
-<!-- ── App shell ──────────────────────────────────────────────────────────── -->
-<div class="app-shell">
-
-  <!-- Header -->
-  <header class="site-header">
-    <div class="header-brand">
-      <div class="brand-bars" id="headerBars">
-        <span></span><span></span><span></span><span></span><span></span>
-      </div>
-      <div class="brand-text">
-        <span class="brand-name">INFERNO<span class="brand-dot">·</span>IRADIO</span>
-        <span class="brand-sub">AoIP BROADCAST BRIDGE</span>
-      </div>
-    </div>
-    <div class="header-status">
-      <span class="api-status" id="apiStatus">[CONNECTING…]</span>
-      <div class="default-vol-wrap">
-        <span class="vol-label-inline">DEFAULT VOL</span>
-        <input type="range" class="vol-slider-inline" id="globalVolSlider" min="0" max="100" value="80"
-          oninput="onGlobalVolumeChange(this)">
-        <span class="vol-val-inline" id="globalVolLabel">80%</span>
-      </div>
-    </div>
-  </header>
-
-  <!-- Tab nav -->
-  <nav class="tab-rail">
-    <button class="rail-btn rail-active" onclick="switchTab('playing')" id="tab-playing">NOW PLAYING</button>
-    <button class="rail-btn" onclick="switchTab('search')" id="tab-search">SCAN STATIONS</button>
-    <button class="rail-btn" onclick="switchTab('favourites')" id="tab-favourites">PRESETS</button>
-  </nav>
-
-  <!-- Main -->
-  <main class="content-area">
-
-    <!-- ── Now Playing ──────────────────────────────────────────────────── -->
-    <section id="section-playing" class="tab-section">
-      <div class="channel-grid" id="playerList">
-        <div class="boot-msg">
-          <span class="boot-cursor">▮</span> NO ACTIVE CHANNELS — SCAN TO TUNE IN
-        </div>
-      </div>
-
-      <div class="quick-play-bar">
-        <span class="quick-play-label">DIRECT URL</span>
-        <input type="text" id="quickUrl" class="mono-input url-input" placeholder="http://stream.example.com/live.mp3">
-        <input type="text" id="quickName" class="mono-input name-input" placeholder="Station ID">
-        <button class="action-btn" onclick="quickPlay()">▶ TX</button>
-      </div>
-    </section>
-
-    <!-- ── Scan Stations ────────────────────────────────────────────────── -->
-    <section id="section-search" class="tab-section hidden">
-      <div class="scan-bar">
-        <div class="scan-input-wrap">
-          <span class="scan-prompt">⌕</span>
-          <input type="text" id="searchInput" class="scan-input" placeholder="SEARCH BY NAME, GENRE, COUNTRY…" oninput="debouncedSearch()">
-        </div>
-        <div class="scan-filters" id="scanFilters">
-          <button class="filter-chip filter-active" id="btnTop" onclick="browseTop()">TOP</button>
-          <button class="filter-chip" id="btnTagsDrop" onclick="toggleTagsDropdown()">TAG ▾</button>
-          <button class="filter-chip" id="btnCountriesDrop" onclick="toggleCountriesDropdown()">COUNTRY ▾</button>
-          <div id="tagsDropdown" class="scan-dropdown hidden"></div>
-          <div id="countriesDropdown" class="scan-dropdown hidden"></div>
-        </div>
-      </div>
-      <div class="station-manifest" id="searchResults">
-        <div class="manifest-empty">
-          <span class="manifest-empty-icon">◈</span>
-          AWAITING SCAN INPUT
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Presets (Favourites) ─────────────────────────────────────────── -->
-    <section id="section-favourites" class="tab-section hidden">
-      <div class="preset-bank" id="favouritesList">
-        <div class="manifest-empty">
-          <span class="manifest-empty-icon">◈</span>
-          NO PRESETS STORED — HIT ★ ON ANY STATION
-        </div>
-      </div>
-    </section>
-
-  </main>
-
-  <!-- Footer -->
-  <footer class="site-footer">
-    <span>INFERNO INTERNET RADIO</span>
-    <span class="footer-sep">//</span>
-    <a href="https://github.com/legopc/inferno-iradio" class="footer-link">legopc/inferno-iradio</a>
-    <span class="footer-sep">//</span>
-    <span>RUST + AXUM + RADIOBROWSER.INFO</span>
-  </footer>
-
-</div>
-
-<script src="app.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>INFERNO·IRADIO</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
 </html>

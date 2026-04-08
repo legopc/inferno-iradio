@@ -127,7 +127,7 @@ pub async fn create_player(
         None => ctx.state.get_slot_gain(slot).await,
     };
 
-    let (id, mut info, mut handle) = spawn_player(
+    let (id, mut info, handle) = spawn_player(
         slot,
         body.name,
         body.url,

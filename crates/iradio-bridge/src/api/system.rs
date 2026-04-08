@@ -6,12 +6,25 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 pub async fn health(State(ctx): State<ApiState>) -> ApiResult<Value> {
-    let players_active = ctx.state.players.read().await.len();
+    let active_players = ctx.state.players.read().await.len();
+    let max_players = ctx.state.config.max_players;
+
+    let mut slot_health = Vec::with_capacity(ctx.state.slot_health.len());
+    for lock in &ctx.state.slot_health {
+        let h = lock.read().await;
+        slot_health.push(json!({
+            "slot": h.slot,
+            "connects": h.connects,
+            "errors": h.errors,
+            "last_error": h.last_error,
+        }));
+    }
+
     Ok(axum::Json(json!({
-        "status": "ok",
-        "version": env!("CARGO_PKG_VERSION"),
-        "players_active": players_active,
-        "max_players": ctx.state.config.max_players,
+        "version": "2.0.0",
+        "active_players": active_players,
+        "max_players": max_players,
+        "slot_health": slot_health,
     })))
 }
 

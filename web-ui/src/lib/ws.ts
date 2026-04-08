@@ -7,7 +7,7 @@ let reconnectDelay = 1000;
 
 export function connectWs() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  socket = new WebSocket(`${proto}//${location.host}/ws`);
+  socket = new WebSocket(`${proto}//${location.host}/api/v2/ws`);
 
   socket.onopen = () => {
     reconnectDelay = 1000;
@@ -22,8 +22,9 @@ export function connectWs() {
   };
 
   socket.onclose = () => {
-    apiOnline.set(false);
     socket = null;
+    // Don't immediately flip offline — let the health-check polling in App.svelte handle that.
+    // Just schedule reconnect.
     reconnectTimer = setTimeout(() => {
       reconnectDelay = Math.min(reconnectDelay * 1.5, 10000);
       connectWs();
@@ -37,7 +38,20 @@ export function connectWs() {
 
 function handleEvent(event: WsEvent) {
   switch (event.type) {
+    case 'snapshot':
+      players.set(event.players);
+      break;
+    case 'vu_batch':
+      vuLevels.update(v => {
+        const next = { ...v };
+        for (const [slotStr, lvl] of Object.entries(event.levels)) {
+          next[+slotStr] = lvl;
+        }
+        return next;
+      });
+      break;
     case 'vu':
+      // legacy single-slot format (fallback)
       vuLevels.update(v => ({ ...v, [event.slot]: { l: event.l, r: event.r } }));
       break;
     case 'icy_meta':
