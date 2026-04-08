@@ -23,12 +23,15 @@ pub fn start_stream_fetch(
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut attempt = 0u32;
+        // After the first successful connect we use the final (post-redirect) URL
+        // so reconnects skip any pre-roll ad served by redirect landing pages.
+        let mut effective_url = url.clone();
 
         loop {
-            debug!("stream: connecting to {} (attempt {})", url, attempt + 1);
+            debug!("stream: connecting to {} (attempt {})", effective_url, attempt + 1);
 
             let result = tokio::select! {
-                r = fetch_stream(&url, &buffer, &client) => r,
+                r = fetch_stream(&effective_url, &buffer, &client) => r,
                 _ = &mut stop_rx => {
                     debug!("stream: stop requested");
                     return;
@@ -36,14 +39,30 @@ pub fn start_stream_fetch(
             };
 
             match result {
-                Ok(()) => {
-                    debug!("stream: clean EOF, reconnecting immediately");
-                    attempt = 0; // clean EOF (server-side restart) — reconnect fast
+                Ok(final_url) => {
+                    // Update effective URL so we skip pre-roll on reconnect
+                    if let Some(u) = final_url {
+                        if u != effective_url {
+                            debug!("stream: using direct URL for reconnects: {}", u);
+                            effective_url = u;
+                        }
+                    }
+                    debug!("stream: clean EOF, reconnecting");
+                    // Don't clear the buffer on clean EOF — let symphonia continue smoothly
+                    attempt = 0;
                 }
-                Err(e) => {
+                Err((e, final_url)) => {
+                    // Update effective URL even on error (we at least got the redirect)
+                    if let Some(u) = final_url {
+                        if u != effective_url {
+                            effective_url = u;
+                        }
+                    }
                     let backoff = (RETRY_BACKOFF_BASE_MS * (1u64 << attempt.min(5)))
                         .min(RETRY_BACKOFF_MAX_MS);
                     warn!("stream: error ({}) — retry in {}ms", e, backoff);
+                    // Clear stale/corrupt bytes before reconnecting
+                    buffer.lock().unwrap().clear();
                     attempt += 1;
                     tokio::time::sleep(Duration::from_millis(backoff)).await;
                 }
@@ -97,13 +116,18 @@ async fn fetch_stream(
     url: &str,
     buffer: &SharedBuffer,
     client: &reqwest::Client,
-) -> anyhow::Result<()> {
+) -> Result<Option<String>, (anyhow::Error, Option<String>)> {
     let response = client
         .get(url)
         .header("Icy-MetaData", "1")
         .send()
-        .await?
-        .error_for_status()?;
+        .await
+        .map_err(|e| (e.into(), None))?
+        .error_for_status()
+        .map_err(|e| (e.into(), None))?;
+
+    // Capture the final URL after redirects so reconnects skip pre-roll ads
+    let final_url = Some(response.url().to_string());
 
     // Detect ICY metadata injection interval
     let metaint = response
@@ -120,7 +144,7 @@ async fn fetch_stream(
     let mut stream = response.bytes_stream();
 
     while let Some(chunk) = stream.next().await {
-        let chunk: Bytes = chunk?;
+        let chunk: Bytes = chunk.map_err(|e| (e.into(), final_url.clone()))?;
         let mut buf = buffer.lock().unwrap();
         // Discard oldest bytes if buffer is full
         while buf.len() + chunk.len() > RING_BUFFER_CAPACITY {
@@ -135,5 +159,5 @@ async fn fetch_stream(
         }
     }
 
-    Ok(())
+    Ok(final_url)
 }
