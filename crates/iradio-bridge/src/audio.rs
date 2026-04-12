@@ -14,7 +14,7 @@
 /// 2. Converts gain_db to linear multiplier: 10^(gain_db/20)
 /// 3. Applies gain to each sample
 /// 4. Applies soft-clip limiter using tanh normalization
-pub fn apply_gain_and_limit(samples: &mut Vec<i32>, gain_db: f32) {
+pub fn apply_gain_and_limit(samples: &mut [i32], gain_db: f32) {
     // Fast-path: skip processing for near-zero gain
     if gain_db.abs() < 0.01 {
         return;
@@ -44,7 +44,7 @@ pub fn apply_gain_and_limit(samples: &mut Vec<i32>, gain_db: f32) {
 ///
 /// # Formula
 /// linear = 10^(db / 20)
-pub fn db_to_linear(db: f32) -> f32 {
+pub fn _db_to_linear(db: f32) -> f32 {
     10_f32.powf(db / 20.0)
 }
 

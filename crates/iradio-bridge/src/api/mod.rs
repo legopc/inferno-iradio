@@ -26,7 +26,7 @@ pub struct ApiContext {
     pub state: SharedState,
     /// Lazily-initialized RadioBrowser client (None until first use)
     pub rb_client: Arc<RwLock<Option<RadioBrowserClient>>>,
-    pub config: Config,
+    pub _config: Config,
 }
 
 pub type ApiState = Arc<ApiContext>;
@@ -73,7 +73,7 @@ pub fn build_router(state: SharedState, config: Config) -> Router {
     let ctx: ApiState = Arc::new(ApiContext {
         state,
         rb_client: rb_holder,
-        config: config.clone(),
+        _config: config.clone(),
     });
 
     let api = Router::new()

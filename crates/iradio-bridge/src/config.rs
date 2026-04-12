@@ -18,7 +18,7 @@ pub struct Config {
     pub websocket: WebSocketConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AuthConfig {
     pub enabled: bool,
@@ -73,16 +73,6 @@ impl Default for Config {
             radiobrowser: RadioBrowserConfig::default(),
             audio: AudioConfig::default(),
             websocket: WebSocketConfig::default(),
-        }
-    }
-}
-
-impl Default for AuthConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            username: String::new(),
-            password: String::new(),
         }
     }
 }

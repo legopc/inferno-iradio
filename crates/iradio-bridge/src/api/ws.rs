@@ -24,7 +24,7 @@ async fn handle_socket(mut socket: WebSocket, state: SharedState) {
     };
     let snapshot = json!({ "type": "snapshot", "players": players });
     if socket
-        .send(Message::Text(snapshot.to_string().into()))
+        .send(Message::Text(snapshot.to_string()))
         .await
         .is_err()
     {
@@ -47,7 +47,7 @@ async fn handle_socket(mut socket: WebSocket, state: SharedState) {
                         .map(|(slot, (l, r))| (slot.to_string(), json!({"l": l, "r": r})))
                         .collect();
                     let msg = json!({ "type": "vu_batch", "levels": levels });
-                    if socket.send(Message::Text(msg.to_string().into())).await.is_err() {
+                    if socket.send(Message::Text(msg.to_string())).await.is_err() {
                         break;
                     }
                 }
@@ -61,7 +61,7 @@ async fn handle_socket(mut socket: WebSocket, state: SharedState) {
                     Ok(event) => {
                         match serde_json::to_string(&event) {
                             Ok(json) => {
-                                if socket.send(Message::Text(json.into())).await.is_err() {
+                                if socket.send(Message::Text(json)).await.is_err() {
                                     break;
                                 }
                             }

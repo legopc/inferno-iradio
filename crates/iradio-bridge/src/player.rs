@@ -83,6 +83,7 @@ pub fn spawn_player(
     (id, info, handle)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_player(
     id: Uuid,
     slot: usize,

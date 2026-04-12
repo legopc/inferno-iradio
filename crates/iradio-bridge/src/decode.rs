@@ -13,7 +13,7 @@ use tracing::{debug, warn};
 /// Decode audio from `source` into interleaved i32 PCM at `target_sample_rate`.
 /// `source` must implement `MediaSource` (i.e. `Read + Seek + Send + Sync`).
 /// Returns the decoded samples and the detected source sample rate.
-pub fn decode_to_pcm(
+pub fn _decode_to_pcm(
     source: Box<dyn MediaSource>,
     target_sample_rate: u32,
 ) -> anyhow::Result<(Vec<i32>, u32)> {
@@ -86,7 +86,7 @@ pub fn decode_to_pcm(
             target_sample_rate,
             stereo_f32.len() / 2
         );
-        resample_stereo(stereo_f32, source_rate, target_sample_rate)?
+        _resample_stereo(stereo_f32, source_rate, target_sample_rate)?
     } else {
         stereo_f32
     };
@@ -129,7 +129,7 @@ fn convert_to_f32(buf: &AudioBufferRef, out: &mut Vec<f32>, channels: usize) {
     }
 }
 
-fn resample_stereo(
+fn _resample_stereo(
     interleaved: Vec<f32>,
     from_rate: u32,
     to_rate: u32,
@@ -226,14 +226,14 @@ impl MediaSource for StreamingMediaSource {
 /// the decode thread.
 pub struct StreamingDecodeHandle {
     pub stop: Arc<AtomicBool>,
-    thread: Option<std::thread::JoinHandle<()>>,
+    _thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl StreamingDecodeHandle {
     /// Signal the decode thread to stop and wait for it.
-    pub fn stop(mut self) {
+    pub fn _stop(mut self) {
         self.stop.store(true, Ordering::Relaxed);
-        if let Some(t) = self.thread.take() {
+        if let Some(t) = self._thread.take() {
             let _ = t.join();
         }
     }
@@ -260,7 +260,7 @@ pub fn start_streaming_decode(
     (
         StreamingDecodeHandle {
             stop,
-            thread: Some(thread),
+            _thread: Some(thread),
         },
         pcm_rx,
     )

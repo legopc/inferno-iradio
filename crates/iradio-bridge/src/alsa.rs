@@ -3,7 +3,7 @@ use alsa::{Direction, ValueOr};
 
 pub struct InfernoAlsaDevice {
     pcm: PCM,
-    pub sample_rate: u32,
+    pub _sample_rate: u32,
     pub channels: u32,
     pub buffer_frames: u32,
 }
@@ -32,7 +32,7 @@ impl InfernoAlsaDevice {
 
         Ok(Self {
             pcm,
-            sample_rate,
+            _sample_rate: sample_rate,
             channels: 2,
             buffer_frames,
         })
@@ -46,7 +46,7 @@ impl InfernoAlsaDevice {
             Ok(n) => Ok(n),
             Err(e) => {
                 // Try to recover from xrun (buffer underrun = EPIPE)
-                if let Err(re) = self.pcm.recover(e.errno() as i32, false) {
+                if let Err(re) = self.pcm.recover(e.errno(), false) {
                     return Err(anyhow::anyhow!("ALSA write+recover failed: {} / {}", e, re));
                 }
                 // Retry once after recovery
@@ -64,7 +64,7 @@ impl InfernoAlsaDevice {
         let _ = self.write_frames(&silence);
     }
 
-    pub fn drain(&self) {
+    pub fn _drain(&self) {
         let _ = self.pcm.drain();
     }
 }
