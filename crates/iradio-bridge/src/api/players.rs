@@ -23,7 +23,9 @@ pub struct CreatePlayerRequest {
     pub gain_db: Option<f32>,
 }
 
-fn default_create_volume() -> f32 { 0.8 }
+fn default_create_volume() -> f32 {
+    0.8
+}
 
 #[derive(Deserialize)]
 pub struct SetVolumeRequest {
@@ -41,10 +43,7 @@ pub async fn list_players(State(ctx): State<ApiState>) -> Json<Vec<PlayerInfo>> 
     Json(list)
 }
 
-pub async fn get_player(
-    State(ctx): State<ApiState>,
-    Path(id): Path<Uuid>,
-) -> impl IntoResponse {
+pub async fn get_player(State(ctx): State<ApiState>, Path(id): Path<Uuid>) -> impl IntoResponse {
     let players = ctx.state.players.read().await;
     match players.get(&id) {
         Some((info, _)) => Json(info.clone()).into_response(),
@@ -81,7 +80,8 @@ pub async fn create_player(
         // Stop any existing player on this slot (overwrite)
         let occupied_id = {
             let players = ctx.state.players.read().await;
-            players.values()
+            players
+                .values()
                 .find(|(info, _)| info.slot == s)
                 .map(|(info, _)| info.id)
         };
@@ -142,10 +142,16 @@ pub async fn create_player(
     handle.set_gain(initial_gain);
 
     let player_json = serde_json::to_value(&info).unwrap_or_default();
-    ctx.state.players.write().await.insert(id, (info.clone(), handle));
+    ctx.state
+        .players
+        .write()
+        .await
+        .insert(id, (info.clone(), handle));
 
     // Broadcast new player to WebSocket subscribers
-    ctx.state.events.send(WsEvent::PlayerUpdate { player: player_json });
+    ctx.state.events.send(WsEvent::PlayerUpdate {
+        player: player_json,
+    });
 
     (StatusCode::CREATED, Json(info)).into_response()
 }
@@ -191,26 +197,21 @@ pub async fn patch_player_gain(
             handle.set_gain(gain_db);
             info.slot
         } else {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "error": "not found" })),
-            )
-                .into_response();
+            return (StatusCode::NOT_FOUND, Json(json!({ "error": "not found" }))).into_response();
         }
     };
     ctx.state.set_slot_gain(slot, gain_db).await;
     (StatusCode::OK, Json(json!({ "gain_db": gain_db }))).into_response()
 }
 
-pub async fn delete_player(
-    State(ctx): State<ApiState>,
-    Path(id): Path<Uuid>,
-) -> impl IntoResponse {
+pub async fn delete_player(State(ctx): State<ApiState>, Path(id): Path<Uuid>) -> impl IntoResponse {
     let removed = ctx.state.players.write().await.remove(&id);
     match removed {
         Some((_, mut handle)) => {
             handle.stop().await;
-            ctx.state.events.send(WsEvent::PlayerStopped { id: id.to_string() });
+            ctx.state
+                .events
+                .send(WsEvent::PlayerStopped { id: id.to_string() });
             StatusCode::NO_CONTENT.into_response()
         }
         None => (

@@ -6,8 +6,7 @@ fn main() {
     println!("cargo:rerun-if-changed=../../web-ui/src");
 
     // Verify web-ui/dist exists — fail fast with helpful message if not
-    let dist = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../web-ui/dist");
+    let dist = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web-ui/dist");
     if !dist.exists() {
         panic!(
             "web-ui/dist not found — run `cd web-ui && npm run build` first\n\

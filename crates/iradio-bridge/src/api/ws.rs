@@ -1,18 +1,15 @@
-use axum::extract::{State, WebSocketUpgrade};
-use axum::extract::ws::{Message, WebSocket};
-use axum::response::IntoResponse;
 use crate::api::ApiState;
 use crate::events::WsEvent;
 use crate::state::SharedState;
+use axum::extract::ws::{Message, WebSocket};
+use axum::extract::{State, WebSocketUpgrade};
+use axum::response::IntoResponse;
+use serde_json::json;
 use std::collections::HashMap;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::time::{interval, Duration};
-use serde_json::json;
 
-pub async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(ctx): State<ApiState>,
-) -> impl IntoResponse {
+pub async fn ws_handler(ws: WebSocketUpgrade, State(ctx): State<ApiState>) -> impl IntoResponse {
     let state = ctx.state.clone();
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
@@ -26,7 +23,11 @@ async fn handle_socket(mut socket: WebSocket, state: SharedState) {
         players.values().map(|(info, _)| info.clone()).collect()
     };
     let snapshot = json!({ "type": "snapshot", "players": players });
-    if socket.send(Message::Text(snapshot.to_string().into())).await.is_err() {
+    if socket
+        .send(Message::Text(snapshot.to_string().into()))
+        .await
+        .is_err()
+    {
         return;
     }
 

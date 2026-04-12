@@ -17,13 +17,12 @@ pub fn ensure_iradio_alsa(max_slots: usize, asoundrc_path: &Path) -> Result<()> 
 
     let bind_ip = extract_field(&content, "BIND_IP")
         .context("BIND_IP not found in .asoundrc — is the Inferno appliance configured?")?;
-    let base_id = extract_field(&content, "DEVICE_ID")
-        .context("DEVICE_ID not found in .asoundrc")?;
-    let clock_path = extract_field(&content, "CLOCK_PATH")
-        .unwrap_or_else(|| "/tmp/ptp-usrvclock".to_string());
+    let base_id =
+        extract_field(&content, "DEVICE_ID").context("DEVICE_ID not found in .asoundrc")?;
+    let clock_path =
+        extract_field(&content, "CLOCK_PATH").unwrap_or_else(|| "/tmp/ptp-usrvclock".to_string());
     // Take only the first NAME value (the Dante device base name)
-    let base_name = extract_field(&content, "NAME")
-        .unwrap_or_else(|| "Inferno".to_string());
+    let base_name = extract_field(&content, "NAME").unwrap_or_else(|| "Inferno".to_string());
 
     // DEVICE_ID prefix = first 12 hex chars; iradio offsets start at 10 (0x000a)
     let id_prefix = if base_id.len() >= 12 {
@@ -32,14 +31,18 @@ pub fn ensure_iradio_alsa(max_slots: usize, asoundrc_path: &Path) -> Result<()> 
         base_id.clone()
     };
     let base_suffix = u32::from_str_radix(
-        if base_id.len() >= 4 { &base_id[base_id.len() - 4..] } else { "0" },
+        if base_id.len() >= 4 {
+            &base_id[base_id.len() - 4..]
+        } else {
+            "0"
+        },
         16,
     )
     .unwrap_or(0);
 
     let mut blocks = String::new();
     for slot in 1..=max_slots {
-        let process_id = 9 + slot;          // slot 1 → PID 10, slot 2 → PID 11 …
+        let process_id = 9 + slot; // slot 1 → PID 10, slot 2 → PID 11 …
         let alt_port = 6100 + (slot - 1) * 20; // 6100, 6120, 6140, 6160
         let device_id = format!(
             "{}{:04x}",
@@ -54,8 +57,7 @@ pub fn ensure_iradio_alsa(max_slots: usize, asoundrc_path: &Path) -> Result<()> 
     }
 
     let new_content = format!("{}\n{}", content.trim_end(), blocks);
-    std::fs::write(asoundrc_path, new_content)
-        .context("Failed to write .asoundrc")?;
+    std::fs::write(asoundrc_path, new_content).context("Failed to write .asoundrc")?;
 
     tracing::info!(
         "Wrote {} iradio ALSA PCM blocks to {:?}",

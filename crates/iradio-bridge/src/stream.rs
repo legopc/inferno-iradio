@@ -37,7 +37,11 @@ pub fn start_stream_fetch(
         let mut effective_url = url.clone();
 
         loop {
-            debug!("stream: connecting to {} (attempt {})", effective_url, attempt + 1);
+            debug!(
+                "stream: connecting to {} (attempt {})",
+                effective_url,
+                attempt + 1
+            );
 
             let result = tokio::select! {
                 r = fetch_stream(&effective_url, &buffer, &client, title_tx.clone()) => r,
@@ -57,7 +61,10 @@ pub fn start_stream_fetch(
                             effective_url = u;
                         }
                     }
-                    debug!("stream: clean EOF after {} bytes, reconnecting", bytes_received);
+                    debug!(
+                        "stream: clean EOF after {} bytes, reconnecting",
+                        bytes_received
+                    );
                     // Don't clear the buffer on clean EOF — let symphonia continue smoothly
                     attempt = 0;
                 }
@@ -180,17 +187,37 @@ async fn fetch_stream(
 
     // Log connection details for diagnostics
     let status = response.status();
-    let content_type = response.headers().get("content-type")
-        .and_then(|v| v.to_str().ok()).unwrap_or("?").to_string();
-    let content_encoding = response.headers().get("content-encoding")
-        .and_then(|v| v.to_str().ok()).unwrap_or("none").to_string();
-    let icy_name = response.headers().get("icy-name")
-        .and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
-    let server = response.headers().get("server")
-        .and_then(|v| v.to_str().ok()).unwrap_or("?").to_string();
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("?")
+        .to_string();
+    let content_encoding = response
+        .headers()
+        .get("content-encoding")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("none")
+        .to_string();
+    let icy_name = response
+        .headers()
+        .get("icy-name")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let server = response
+        .headers()
+        .get("server")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("?")
+        .to_string();
     info!(
         "stream: connected {} | type={} enc={} icy-name={:?} server={} url={}",
-        status, content_type, content_encoding, icy_name, server,
+        status,
+        content_type,
+        content_encoding,
+        icy_name,
+        server,
         final_url.as_deref().unwrap_or(url)
     );
 

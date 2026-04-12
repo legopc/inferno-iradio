@@ -122,9 +122,7 @@ impl Default for AudioConfig {
 
 impl Default for WebSocketConfig {
     fn default() -> Self {
-        Self {
-            vu_fps: 20,
-        }
+        Self { vu_fps: 20 }
     }
 }
 

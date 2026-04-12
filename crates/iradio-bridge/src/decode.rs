@@ -23,8 +23,7 @@ pub fn decode_to_pcm(
     let meta_opts = MetadataOptions::default();
     let dec_opts = DecoderOptions::default();
 
-    let probed =
-        symphonia::default::get_probe().format(&hint, mss, &format_opts, &meta_opts)?;
+    let probed = symphonia::default::get_probe().format(&hint, mss, &format_opts, &meta_opts)?;
 
     let mut format = probed.format;
 
@@ -36,13 +35,9 @@ pub fn decode_to_pcm(
         .ok_or_else(|| anyhow::anyhow!("no audio track found"))?;
 
     let track_id = track.id;
-    let mut decoder =
-        symphonia::default::get_codecs().make(&track.codec_params, &dec_opts)?;
+    let mut decoder = symphonia::default::get_codecs().make(&track.codec_params, &dec_opts)?;
 
-    let source_rate = track
-        .codec_params
-        .sample_rate
-        .unwrap_or(target_sample_rate);
+    let source_rate = track.codec_params.sample_rate.unwrap_or(target_sample_rate);
 
     let mut samples_f32: Vec<f32> = Vec::new();
     let mut channels = 2usize;
@@ -149,13 +144,8 @@ fn resample_stereo(
     }
 
     let chunk_size = 1024usize;
-    let mut resampler = FftFixedIn::<f32>::new(
-        from_rate as usize,
-        to_rate as usize,
-        chunk_size,
-        2,
-        2,
-    )?;
+    let mut resampler =
+        FftFixedIn::<f32>::new(from_rate as usize, to_rate as usize, chunk_size, 2, 2)?;
 
     let mut out_left: Vec<f32> = Vec::new();
     let mut out_right: Vec<f32> = Vec::new();
@@ -224,8 +214,12 @@ impl Seek for StreamingMediaSource {
 }
 
 impl MediaSource for StreamingMediaSource {
-    fn is_seekable(&self) -> bool { false }
-    fn byte_len(&self) -> Option<u64> { None }
+    fn is_seekable(&self) -> bool {
+        false
+    }
+    fn byte_len(&self) -> Option<u64> {
+        None
+    }
 }
 
 /// Handle returned by `start_streaming_decode`. Drop or call `stop()` to halt
@@ -263,7 +257,13 @@ pub fn start_streaming_decode(
         decode_stream_thread(buffer, stop2, target_sample_rate, period_frames, pcm_tx);
     });
 
-    (StreamingDecodeHandle { stop, thread: Some(thread) }, pcm_rx)
+    (
+        StreamingDecodeHandle {
+            stop,
+            thread: Some(thread),
+        },
+        pcm_rx,
+    )
 }
 
 fn decode_stream_thread(
@@ -273,7 +273,11 @@ fn decode_stream_thread(
     period_frames: usize,
     pcm_tx: tokio::sync::mpsc::Sender<Vec<i32>>,
 ) {
-    let source = StreamingMediaSource { buffer, stop: stop.clone(), pos: 0 };
+    let source = StreamingMediaSource {
+        buffer,
+        stop: stop.clone(),
+        pos: 0,
+    };
     let mss = MediaSourceStream::new(Box::new(source), Default::default());
 
     let probed = match symphonia::default::get_probe().format(
@@ -308,15 +312,15 @@ fn decode_stream_thread(
     let need_resample = source_rate != target_sample_rate;
     let resample_chunk = 1024usize;
 
-    let mut decoder =
-        match symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default())
-        {
-            Ok(d) => d,
-            Err(e) => {
-                warn!("streaming decode: codec init failed: {}", e);
-                return;
-            }
-        };
+    let mut decoder = match symphonia::default::get_codecs()
+        .make(&track.codec_params, &DecoderOptions::default())
+    {
+        Ok(d) => d,
+        Err(e) => {
+            warn!("streaming decode: codec init failed: {}", e);
+            return;
+        }
+    };
 
     let mut resampler: Option<FftFixedIn<f32>> = if need_resample {
         match FftFixedIn::new(

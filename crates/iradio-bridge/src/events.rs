@@ -1,14 +1,28 @@
-use tokio::sync::broadcast;
 use serde::{Deserialize, Serialize};
+use tokio::sync::broadcast;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WsEvent {
-    Vu { slot: usize, l: f32, r: f32 },
-    IcyMeta { slot: usize, title: String },
-    PlayerUpdate { player: serde_json::Value },
-    PlayerStopped { id: String },
-    Health { active: usize, max: usize },
+    Vu {
+        slot: usize,
+        l: f32,
+        r: f32,
+    },
+    IcyMeta {
+        slot: usize,
+        title: String,
+    },
+    PlayerUpdate {
+        player: serde_json::Value,
+    },
+    PlayerStopped {
+        id: String,
+    },
+    Health {
+        active: usize,
+        max: usize,
+    },
     SlotHealth {
         slot: usize,
         connects: u32,

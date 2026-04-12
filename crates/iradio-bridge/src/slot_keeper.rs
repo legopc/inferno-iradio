@@ -6,8 +6,8 @@
 //! `SlotSender` and the keeper writes those instead.
 
 use std::time::Duration;
-use tokio::sync::mpsc;
 use tokio::sync::broadcast;
+use tokio::sync::mpsc;
 use tracing::{info, warn};
 
 use crate::alsa::{device_name, InfernoAlsaDevice};
@@ -70,7 +70,11 @@ async fn run_keeper(
                 // Nothing queued — feed silence to keep Dante TX channel alive.
                 alsa.write_silence();
                 // Send silence-level VU so UI meters fall to floor
-                let _ = event_tx.send(WsEvent::Vu { slot, l: -96.0, r: -96.0 });
+                let _ = event_tx.send(WsEvent::Vu {
+                    slot,
+                    l: -96.0,
+                    r: -96.0,
+                });
                 // Yield so other tasks get a turn (write_silence may have blocked
                 // ~85 ms waiting for ALSA buffer space, so this is low-overhead).
                 tokio::task::yield_now().await;

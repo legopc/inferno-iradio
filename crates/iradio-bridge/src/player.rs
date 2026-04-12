@@ -4,8 +4,8 @@ use crate::slot_keeper::SlotSender;
 use crate::state::{PlayerInfo, PlayerState, SharedState};
 use crate::stream::SharedBuffer;
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::{oneshot, watch};
 use tracing::{error, info, warn};
@@ -61,7 +61,16 @@ pub fn spawn_player(
     let id_clone = id;
 
     let task = tokio::spawn(run_player(
-        id_clone, slot, url, name, cfg, state_clone, stop_rx, vol_rx, gain_rx, slot_tx,
+        id_clone,
+        slot,
+        url,
+        name,
+        cfg,
+        state_clone,
+        stop_rx,
+        vol_rx,
+        gain_rx,
+        slot_tx,
     ));
 
     let handle = PlayerHandle {
@@ -240,7 +249,8 @@ async fn set_player_state(state: &SharedState, id: Uuid, new_state: PlayerState)
         }
     };
     if let Some(json) = player_json {
-        state.events.send(crate::events::WsEvent::PlayerUpdate { player: json });
+        state
+            .events
+            .send(crate::events::WsEvent::PlayerUpdate { player: json });
     }
 }
-

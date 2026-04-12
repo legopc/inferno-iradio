@@ -63,7 +63,9 @@ pub struct PlayerInfo {
     pub gain_db: f32,
 }
 
-fn default_volume() -> f32 { 1.0 }
+fn default_volume() -> f32 {
+    1.0
+}
 
 impl PlayerInfo {
     pub fn new(id: Uuid, slot: usize, name: String, url: String) -> Self {
@@ -117,7 +119,12 @@ impl AppState {
         let slot_volumes = Self::load_volumes(&config.volumes_path, config.max_players);
         let slot_gains = Self::load_gains(&config.audio.gains_path, config.max_players);
         let slot_health: Vec<_> = (1..=config.max_players)
-            .map(|slot| tokio::sync::RwLock::new(SlotHealth { slot, ..Default::default() }))
+            .map(|slot| {
+                tokio::sync::RwLock::new(SlotHealth {
+                    slot,
+                    ..Default::default()
+                })
+            })
             .collect();
         Self {
             config,
@@ -192,7 +199,10 @@ impl AppState {
         let vols = self.slot_volumes.read().await;
         let json = match serde_json::to_string(&*vols) {
             Ok(j) => j,
-            Err(e) => { warn!("save_volumes: serialize error: {}", e); return; }
+            Err(e) => {
+                warn!("save_volumes: serialize error: {}", e);
+                return;
+            }
         };
         if let Some(parent) = self.config.volumes_path.parent() {
             let _ = std::fs::create_dir_all(parent);
@@ -224,7 +234,10 @@ impl AppState {
         let gains = self.slot_gains.read().await;
         let json = match serde_json::to_string(&*gains) {
             Ok(j) => j,
-            Err(e) => { warn!("save_gains: serialize error: {}", e); return; }
+            Err(e) => {
+                warn!("save_gains: serialize error: {}", e);
+                return;
+            }
         };
         if let Some(parent) = self.config.audio.gains_path.parent() {
             let _ = std::fs::create_dir_all(parent);

@@ -79,7 +79,10 @@ pub fn build_router(state: SharedState, config: Config) -> Router {
     let api = Router::new()
         .route("/health", get(system::health))
         .route("/config", get(system::get_config))
-        .route("/volume", get(system::get_volume).put(system::set_default_volume))
+        .route(
+            "/volume",
+            get(system::get_volume).put(system::set_default_volume),
+        )
         .route("/players", get(players::list_players))
         .route("/players", post(players::create_player))
         .route("/players/:id", get(players::get_player))
@@ -103,7 +106,13 @@ pub fn build_router(state: SharedState, config: Config) -> Router {
     let auth_pass = config.auth.password.clone();
 
     let api_authed = api.layer(middleware::from_fn(move |req, next| {
-        basic_auth_middleware(req, next, auth_user.clone(), auth_pass.clone(), auth_enabled)
+        basic_auth_middleware(
+            req,
+            next,
+            auth_user.clone(),
+            auth_pass.clone(),
+            auth_enabled,
+        )
     }));
 
     Router::new()
@@ -117,9 +126,7 @@ async fn serve_index() -> impl IntoResponse {
     serve_asset("index.html")
 }
 
-async fn serve_static(
-    axum::extract::Path(path): axum::extract::Path<String>,
-) -> impl IntoResponse {
+async fn serve_static(axum::extract::Path(path): axum::extract::Path<String>) -> impl IntoResponse {
     serve_asset(&path)
 }
 
@@ -129,10 +136,7 @@ fn serve_asset(path: &str) -> Response {
             let mime = mime_guess::from_path(path).first_or_octet_stream();
             (
                 StatusCode::OK,
-                [(
-                    axum::http::header::CONTENT_TYPE,
-                    mime.as_ref().to_string(),
-                )],
+                [(axum::http::header::CONTENT_TYPE, mime.as_ref().to_string())],
                 content.data.to_vec(),
             )
                 .into_response()

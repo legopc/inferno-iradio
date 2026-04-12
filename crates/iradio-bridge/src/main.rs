@@ -4,9 +4,9 @@ use std::sync::Arc;
 use tokio::signal;
 use tracing::info;
 
-mod api;
 mod alsa;
 mod alsa_setup;
+mod api;
 mod audio;
 mod auth;
 mod config;
@@ -25,7 +25,12 @@ mod stream;
     version
 )]
 struct Args {
-    #[arg(short, long, default_value = "/etc/iradio/config.toml", env = "IRADIO_CONFIG")]
+    #[arg(
+        short,
+        long,
+        default_value = "/etc/iradio/config.toml",
+        env = "IRADIO_CONFIG"
+    )]
     config: String,
 
     #[arg(short, long, env = "IRADIO_PORT")]
@@ -84,7 +89,9 @@ async fn main() -> anyhow::Result<()> {
 
 async fn shutdown_signal() {
     let ctrl_c = async {
-        signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
     };
 
     #[cfg(unix)]

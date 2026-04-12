@@ -64,7 +64,10 @@ impl RadioBrowserClient {
                 tracing::warn!("RadioBrowser DNS returned no addresses, falling back to de1");
             }
             Err(e) => {
-                tracing::warn!("RadioBrowser DNS lookup failed ({}), falling back to de1", e);
+                tracing::warn!(
+                    "RadioBrowser DNS lookup failed ({}), falling back to de1",
+                    e
+                );
             }
         }
         "https://de1.api.radio-browser.info/json".to_string()

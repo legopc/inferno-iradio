@@ -38,14 +38,12 @@ fn default_limit() -> usize {
 }
 
 /// Clone the RadioBrowserClient out of the lock so we don't hold it across await points.
-async fn get_client(
-    ctx: &ApiState,
-) -> Result<crate::radiobrowser::RadioBrowserClient, AppError> {
-    ctx.rb_client
-        .read()
-        .await
-        .clone()
-        .ok_or_else(|| AppError(anyhow::anyhow!("RadioBrowser client is initializing, retry shortly")))
+async fn get_client(ctx: &ApiState) -> Result<crate::radiobrowser::RadioBrowserClient, AppError> {
+    ctx.rb_client.read().await.clone().ok_or_else(|| {
+        AppError(anyhow::anyhow!(
+            "RadioBrowser client is initializing, retry shortly"
+        ))
+    })
 }
 
 pub async fn search(
@@ -95,6 +93,7 @@ pub async fn by_country(
     Query(q): Query<CountryQuery>,
 ) -> ApiResult<Vec<Station>> {
     let rb = get_client(&ctx).await?;
-    Ok(axum::Json(rb.stations_by_country(&q.country, q.limit).await?))
+    Ok(axum::Json(
+        rb.stations_by_country(&q.country, q.limit).await?,
+    ))
 }
-
